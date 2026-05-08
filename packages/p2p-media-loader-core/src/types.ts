@@ -243,7 +243,7 @@ export type StreamConfig = {
    * Time in milliseconds to delay the HTTP fallback for the very first segments.
    * This gives the tracker time to discover peers when playback just started.
    * A higher value gives a better chance to download the initial segments via P2P, thus improving the overall P2P ratio.
-   * However, setting this value too high can increase the playback startup time or even stall the download if peers are not immediately available.
+   * However, setting this value too high can increase the playback startup time or even stall the playback if peers are not immediately available.
    * If `0`, HTTP fallback happens immediately.
    *
    * @default
