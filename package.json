@@ -31,13 +31,5 @@
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.59.2",
     "vite": "^8.0.11"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "bufferutil",
-      "core-js",
-      "node-datachannel",
-      "utf-8-validate"
-    ]
   }
 }

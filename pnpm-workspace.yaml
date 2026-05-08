@@ -1,3 +1,9 @@
 packages:
   - "packages/*"
   - "demo"
+
+allowBuilds:
+  bufferutil: true
+  core-js: true
+  node-datachannel: true
+  utf-8-validate: true
