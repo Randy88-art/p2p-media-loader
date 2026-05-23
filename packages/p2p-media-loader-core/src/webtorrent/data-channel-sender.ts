@@ -1,5 +1,7 @@
-const MAX_BUFFERED_AMOUNT = 64 * 1024; // 64 KB, matching simple-peer
+import { getPromiseWithResolvers } from "../utils/utils.js";
 import { getRTCErrorMessage } from "./utils.js";
+
+const MAX_BUFFERED_AMOUNT = 64 * 1024; // 64 KB, matching simple-peer
 
 export class DataChannelSender {
   #currentSendContext?: { cancel: () => void };
@@ -10,6 +12,7 @@ export class DataChannelSender {
   ) {}
 
   async sendData(
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-arguments
     data: ArrayBuffer | ArrayBufferView<ArrayBuffer>,
     onChunkSent?: (chunkSize: number) => void,
   ): Promise<void> {
@@ -22,12 +25,7 @@ export class DataChannelSender {
 
     this.channel.bufferedAmountLowThreshold = MAX_BUFFERED_AMOUNT;
 
-    let resolve!: () => void;
-    let reject!: (reason?: unknown) => void;
-    const promise = new Promise<void>((res, rej) => {
-      resolve = res;
-      reject = rej;
-    });
+    const { promise, resolve, reject } = getPromiseWithResolvers();
 
     let offset = 0;
     let isSettled = false;
