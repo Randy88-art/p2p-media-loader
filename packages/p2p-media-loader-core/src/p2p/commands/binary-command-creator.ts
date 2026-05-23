@@ -1,5 +1,12 @@
 import * as Serialization from "./binary-serialization.js";
-import { PeerCommandType, PeerCommand } from "./types.js";
+import {
+  PeerCommandType,
+  PeerCommand,
+  PeerSegmentCommand,
+  PeerRequestSegmentCommand,
+  PeerSegmentAnnouncementCommand,
+  PeerSendSegmentCommand,
+} from "./types.js";
 
 const FRAME_PART_LENGTH = 4;
 const commandFrameStart = stringToUtf8CodesBuffer("cstr", FRAME_PART_LENGTH);
@@ -11,8 +18,9 @@ const endFrames = [commandFrameEnd, commandDivFrameEnd];
 const commandFramesLength = commandFrameStart.length + commandFrameEnd.length;
 
 export function isCommandChunk(buffer: Uint8Array) {
+  if (buffer.length < commandFramesLength) return false;
   const { length } = commandFrameStart;
-  const bufferEndingToCompare = buffer.slice(-length);
+  const bufferEndingToCompare = buffer.subarray(-length);
   return (
     startFrames.some((frame) =>
       areBuffersEqual(buffer, frame, FRAME_PART_LENGTH),
@@ -24,12 +32,14 @@ export function isCommandChunk(buffer: Uint8Array) {
 }
 
 function isFirstCommandChunk(buffer: Uint8Array) {
+  if (buffer.length < commandFramesLength) return false;
   return areBuffersEqual(buffer, commandFrameStart, FRAME_PART_LENGTH);
 }
 
 function isLastCommandChunk(buffer: Uint8Array) {
+  if (buffer.length < commandFramesLength) return false;
   return areBuffersEqual(
-    buffer.slice(-FRAME_PART_LENGTH),
+    buffer.subarray(-FRAME_PART_LENGTH),
     commandFrameEnd,
     FRAME_PART_LENGTH,
   );
@@ -42,84 +52,85 @@ export class BinaryCommandJoiningError extends Error {
 }
 
 export class BinaryCommandChunksJoiner {
-  private readonly chunks = new Serialization.ResizableUint8Array();
-  private status: "joining" | "completed" = "joining";
+  readonly #chunks = new Serialization.ResizableUint8Array();
+  #status: "joining" | "completed" = "joining";
+  readonly #onComplete: (commandBuffer: Uint8Array) => void;
 
-  constructor(
-    private readonly onComplete: (commandBuffer: Uint8Array) => void,
-  ) {}
-
-  addCommandChunk(chunk: Uint8Array) {
-    if (this.status === "completed") return;
-
-    const isFirstChunk = isFirstCommandChunk(chunk);
-    if (!this.chunks.length && !isFirstChunk) {
-      throw new BinaryCommandJoiningError("no-first-chunk");
-    }
-    if (this.chunks.length && isFirstChunk) {
-      throw new BinaryCommandJoiningError("incomplete-joining");
-    }
-    this.chunks.push(this.unframeCommandChunk(chunk));
-
-    if (!isLastCommandChunk(chunk)) return;
-    this.status = "completed";
-    this.onComplete(this.chunks.getBuffer());
+  constructor(onComplete: (commandBuffer: Uint8Array) => void) {
+    this.#onComplete = onComplete;
   }
 
-  private unframeCommandChunk(chunk: Uint8Array) {
-    return chunk.slice(FRAME_PART_LENGTH, chunk.length - FRAME_PART_LENGTH);
+  addCommandChunk(chunk: Uint8Array) {
+    if (this.#status === "completed") return;
+
+    const isFirstChunk = isFirstCommandChunk(chunk);
+    if (!this.#chunks.length && !isFirstChunk) {
+      throw new BinaryCommandJoiningError("no-first-chunk");
+    }
+    if (this.#chunks.length && isFirstChunk) {
+      throw new BinaryCommandJoiningError("incomplete-joining");
+    }
+    this.#chunks.push(this.#unframeCommandChunk(chunk));
+
+    if (!isLastCommandChunk(chunk)) return;
+    this.#status = "completed";
+    this.#onComplete(this.#chunks.getBuffer());
+  }
+
+  #unframeCommandChunk(chunk: Uint8Array) {
+    if (chunk.length < commandFramesLength) {
+      throw new Error("Command chunk is too short to unframe");
+    }
+    return chunk.subarray(FRAME_PART_LENGTH, chunk.length - FRAME_PART_LENGTH);
   }
 }
 
 export class BinaryCommandCreator {
-  private readonly bytes = new Serialization.ResizableUint8Array();
-  private resultBuffers: Uint8Array[] = [];
-  private status: "creating" | "completed" = "creating";
+  readonly #bytes = new Serialization.ResizableUint8Array();
+  #resultBuffers: Uint8Array<ArrayBuffer>[] = [];
+  #status: "creating" | "completed" = "creating";
+  readonly #maxChunkLength: number;
 
-  constructor(
-    commandType: PeerCommandType,
-    private readonly maxChunkLength: number,
-  ) {
-    this.bytes.push(commandType);
+  constructor(commandType: PeerCommandType, maxChunkLength: number) {
+    this.#maxChunkLength = maxChunkLength;
+    this.#bytes.push(commandType);
   }
 
   addInteger(name: string, value: number) {
-    this.bytes.push(name.charCodeAt(0));
-    const bytes = Serialization.serializeInt(BigInt(value));
-    this.bytes.push(bytes);
+    this.#bytes.push(name.charCodeAt(0));
+    const bytes = Serialization.serializeInt(value);
+    this.#bytes.push(bytes);
   }
 
   addSimilarIntArr(name: string, arr: number[]) {
-    this.bytes.push(name.charCodeAt(0));
-    const bytes = Serialization.serializeSimilarIntArray(
-      arr.map((num) => BigInt(num)),
-    );
-    this.bytes.push(bytes);
+    this.#bytes.push(name.charCodeAt(0));
+    const bytes = Serialization.serializeSimilarIntArray(arr);
+    this.#bytes.push(bytes);
   }
 
   addString(name: string, string: string) {
-    this.bytes.push(name.charCodeAt(0));
+    this.#bytes.push(name.charCodeAt(0));
     const bytes = Serialization.serializeString(string);
-    this.bytes.push(bytes);
+    this.#bytes.push(bytes);
   }
 
   complete() {
-    if (!this.bytes.length) throw new Error("Buffer is empty");
-    if (this.status === "completed") return;
-    this.status = "completed";
+    if (!this.#bytes.length) throw new Error("Buffer is empty");
+    if (this.#status === "completed") return;
+    this.#status = "completed";
 
-    const unframedBuffer = this.bytes.getBuffer();
-    if (unframedBuffer.length + commandFramesLength <= this.maxChunkLength) {
-      this.resultBuffers.push(
+    const unframedBuffer = this.#bytes.getBuffer();
+    if (unframedBuffer.length + commandFramesLength <= this.#maxChunkLength) {
+      this.#resultBuffers.push(
         frameBuffer(unframedBuffer, commandFrameStart, commandFrameEnd),
       );
       return;
     }
 
-    let chunksCount = Math.ceil(unframedBuffer.length / this.maxChunkLength);
+    let chunksCount = Math.ceil(unframedBuffer.length / this.#maxChunkLength);
     if (
       Math.ceil(unframedBuffer.length / chunksCount) + commandFramesLength >
-      this.maxChunkLength
+      this.#maxChunkLength
     ) {
       chunksCount++;
     }
@@ -129,26 +140,26 @@ export class BinaryCommandCreator {
       chunksCount,
     )) {
       if (i === 0) {
-        this.resultBuffers.push(
+        this.#resultBuffers.push(
           frameBuffer(chunk, commandFrameStart, commandDivFrameEnd),
         );
       } else if (i === chunksCount - 1) {
-        this.resultBuffers.push(
+        this.#resultBuffers.push(
           frameBuffer(chunk, commandDivFrameStart, commandFrameEnd),
         );
       } else {
-        this.resultBuffers.push(
+        this.#resultBuffers.push(
           frameBuffer(chunk, commandDivFrameStart, commandDivFrameEnd),
         );
       }
     }
   }
 
-  getResultBuffers(): Uint8Array[] {
-    if (this.status === "creating" || !this.resultBuffers.length) {
+  getResultBuffers(): Uint8Array<ArrayBuffer>[] {
+    if (this.#status === "creating" || !this.#resultBuffers.length) {
       throw new Error("Command is not complete.");
     }
-    return this.resultBuffers;
+    return this.#resultBuffers;
   }
 }
 
@@ -168,24 +179,24 @@ export function deserializeCommand(bytes: Uint8Array): PeerCommand {
       case Serialization.SerializedItem.Int:
         {
           const { number, byteLength } = Serialization.deserializeInt(
-            bytes.slice(offset),
+            bytes.subarray(offset),
           );
-          deserializedCommand[name] = Number(number);
+          deserializedCommand[name] = number;
           offset += byteLength;
         }
         break;
       case Serialization.SerializedItem.SimilarIntArray:
         {
           const { numbers, byteLength } =
-            Serialization.deserializeSimilarIntArray(bytes.slice(offset));
-          deserializedCommand[name] = numbers.map((n) => Number(n));
+            Serialization.deserializeSimilarIntArray(bytes.subarray(offset));
+          deserializedCommand[name] = numbers;
           offset += byteLength;
         }
         break;
       case Serialization.SerializedItem.String:
         {
           const { string, byteLength } = Serialization.deserializeString(
-            bytes.slice(offset),
+            bytes.subarray(offset),
           );
           deserializedCommand[name] = string;
           offset += byteLength;
@@ -193,7 +204,7 @@ export function deserializeCommand(bytes: Uint8Array): PeerCommand {
         break;
     }
   }
-  return deserializedCommand as unknown as PeerCommand;
+  return validateCommand(deserializedCommand);
 }
 
 function getDataTypeFromByte(byte: number): Serialization.SerializedItem {
@@ -223,7 +234,7 @@ function* splitBufferToEqualChunks(
 ): Generator<[number, Uint8Array], void> {
   const chunkLength = Math.ceil(buffer.length / chunksCount);
   for (let i = 0; i < chunksCount; i++) {
-    yield [i, buffer.slice(i * chunkLength, (i + 1) * chunkLength)];
+    yield [i, buffer.subarray(i * chunkLength, (i + 1) * chunkLength)];
   }
 }
 
@@ -251,4 +262,41 @@ function areBuffersEqual(
     if (buffer1[i] !== buffer2[i]) return false;
   }
   return true;
+}
+
+function validateCommand(command: Record<string, unknown>): PeerCommand {
+  switch (command.c) {
+    case PeerCommandType.SegmentsAnnouncement:
+      return command as unknown as PeerSegmentAnnouncementCommand;
+
+    case PeerCommandType.SegmentRequest:
+      assertNumberFields(command, "i", "r");
+      return command as unknown as PeerRequestSegmentCommand;
+
+    case PeerCommandType.SegmentData:
+      assertNumberFields(command, "i", "r", "s");
+      return command as unknown as PeerSendSegmentCommand;
+
+    case PeerCommandType.SegmentAbsent:
+    case PeerCommandType.CancelSegmentRequest:
+    case PeerCommandType.SegmentDataSendingCompleted:
+      assertNumberFields(command, "i", "r");
+      return command as unknown as PeerSegmentCommand;
+
+    default:
+      throw new Error(`Unknown peer command type: ${String(command.c)}`);
+  }
+}
+
+function assertNumberFields(
+  obj: Record<string, unknown>,
+  ...fields: string[]
+): void {
+  for (const field of fields) {
+    if (typeof obj[field] !== "number") {
+      throw new Error(
+        `Expected number field "${field}", got ${typeof obj[field]}`,
+      );
+    }
+  }
 }
