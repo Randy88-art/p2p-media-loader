@@ -579,7 +579,7 @@ export class WebTorrentClient {
         connection: pending.connection,
         channel,
       });
-    } catch (err) {
+    } catch (err: unknown) {
       pending.connection.close();
       if (!this.#isDestroyed()) {
         this.#eventTarget.dispatchEvent("peerConnectFailed", {
@@ -671,20 +671,6 @@ export class WebTorrentClient {
     let timeoutId: ReturnType<typeof setTimeout> | undefined = undefined;
     let boundChannel: RTCDataChannel | undefined = channel;
 
-    const cleanup = () => {
-      clearTimeout(timeoutId);
-      pc.removeEventListener("iceconnectionstatechange", rejectIfTerminalState);
-      pc.removeEventListener("datachannel", onDataChannel);
-
-      if (boundChannel) {
-        boundChannel.removeEventListener("open", onChannelOpen);
-        boundChannel.removeEventListener("error", onChannelError);
-        boundChannel.removeEventListener("close", onChannelClose);
-        boundChannel.removeEventListener("closing", onChannelClose);
-      }
-      this.#destroyAbortController.signal.removeEventListener("abort", onAbort);
-    };
-
     const rejectIfTerminalState = () => {
       if (isTerminalConnectionState(pc.iceConnectionState)) {
         cleanup();
@@ -736,6 +722,20 @@ export class WebTorrentClient {
     const onAbort = () => {
       cleanup();
       reject(new Error("Connection aborted due to teardown"));
+    };
+
+    const cleanup = () => {
+      clearTimeout(timeoutId);
+      pc.removeEventListener("iceconnectionstatechange", rejectIfTerminalState);
+      pc.removeEventListener("datachannel", onDataChannel);
+
+      if (boundChannel) {
+        boundChannel.removeEventListener("open", onChannelOpen);
+        boundChannel.removeEventListener("error", onChannelError);
+        boundChannel.removeEventListener("close", onChannelClose);
+        boundChannel.removeEventListener("closing", onChannelClose);
+      }
+      this.#destroyAbortController.signal.removeEventListener("abort", onAbort);
     };
 
     if (this.#destroyAbortController.signal.aborted) {
