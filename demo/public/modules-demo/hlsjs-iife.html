@@ -20,18 +20,18 @@
       function initApp() {
         if (Hls.isSupported()) {
           const video = document.getElementById("video");
-          
+
           // The IIFE bundle exports its contents on the global variable defined in vite config
           const { HlsJsP2PEngine } = window.p2pml.hlsjs;
-          
+
           const HlsWithP2P = HlsJsP2PEngine.injectMixin(window.Hls);
           const hls = new HlsWithP2P();
-          
+
           hls.attachMedia(video);
           hls.on(Hls.Events.ERROR, function (event, data) {
             console.error("Error code", data.details, "object", data);
           });
-          
+
           try {
             hls.loadSource(manifestUri);
           } catch (e) {

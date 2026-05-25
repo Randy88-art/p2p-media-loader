@@ -20,22 +20,27 @@
       async function initApp() {
         if (shaka.Player.isBrowserSupported()) {
           const video = document.getElementById("video");
-          
+
           // The IIFE bundle exports its contents on the global variable defined in vite config
           const { ShakaP2PEngine } = window.p2pml.shaka;
-          
+
           ShakaP2PEngine.registerPlugins();
           const engine = new ShakaP2PEngine();
-          
+
           const player = new shaka.Player();
           await player.attach(video);
-          
-          player.addEventListener("error", function(event) {
-            console.error("Error code", event.detail.code, "object", event.detail);
+
+          player.addEventListener("error", function (event) {
+            console.error(
+              "Error code",
+              event.detail.code,
+              "object",
+              event.detail,
+            );
           });
-          
+
           engine.bindShakaPlayer(player);
-          
+
           try {
             await player.load(manifestUri);
           } catch (e) {

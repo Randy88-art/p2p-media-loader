@@ -83,7 +83,7 @@ _Note: If the WebRTC connection fails (e.g. ICE gathering timeout or data channe
 
 ### Peer Connection Lifecycle
 
-The `WebTorrentClient` fully encapsulates the WebRTC negotiation and data channel establishment. 
+The `WebTorrentClient` fully encapsulates the WebRTC negotiation and data channel establishment.
 
 - If a peer successfully completes WebRTC signaling and its Data Channel opens, the client emits a `peerConnected` event. The Manager removes the peer from `#connectingPeers`, stores it in `#connectedPeers`, and dispatches its own `peerConnected` event upstream.
 - If a peer fails to connect (either during signaling or while waiting for the data channel), the client emits a `peerConnectFailed` event. The Manager removes the peer from `#connectingPeers` and forwards the `peerConnectFailed` event upstream.

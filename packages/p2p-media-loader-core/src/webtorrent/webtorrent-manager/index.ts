@@ -235,9 +235,7 @@ export class WebTorrentManager {
     channel: RTCDataChannel,
     trackerUrl: string,
   ): void {
-    if (
-      isTerminalConnectionState(connection.iceConnectionState)
-    ) {
+    if (isTerminalConnectionState(connection.iceConnectionState)) {
       connection.close();
       this.#eventTarget.dispatchEvent("peerConnectFailed", {
         peerId,
