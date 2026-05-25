@@ -4,7 +4,7 @@ A lightweight WebTorrent signaling client that handles the WebSocket tracker pro
 
 ## Overview
 
-The `WebTorrentClient` acts as a signaling layer using the `WebSocketClient` under the hood. It connects to a single standard WebTorrent tracker, exchanges SDP offers and answers, manages ICE candidate gathering, and returns negotiating (not yet connected) `RTCPeerConnection` and `RTCDataChannel` instances to consumers.
+The `WebTorrentClient` acts as a signaling layer using the `WebSocketClient` under the hood. It connects to a single standard WebTorrent tracker, exchanges SDP offers and answers, manages ICE candidate gathering, and returns fully connected `RTCPeerConnection` and `RTCDataChannel` instances to consumers.
 
 **Key Design Decisions:**
 

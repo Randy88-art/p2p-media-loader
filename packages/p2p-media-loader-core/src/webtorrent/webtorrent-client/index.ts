@@ -452,7 +452,7 @@ export class WebTorrentClient {
     event,
   }: {
     numwant: number;
-    offers: unknown[];
+    offers: { offer: { type: string; sdp: string }; offer_id: string }[];
     event?: string;
   }): Record<string, unknown> {
     const payload: Record<string, unknown> = {
