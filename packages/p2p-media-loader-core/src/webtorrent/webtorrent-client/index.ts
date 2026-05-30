@@ -70,16 +70,23 @@ function generateOfferId(): string {
   return id;
 }
 
+const VALID_SDP_TYPES = new Set(["offer", "answer", "pranswer", "rollback"]);
+
 function isSessionDescriptionInit(
   value: unknown,
 ): value is RTCSessionDescriptionInit {
   if (typeof value !== "object" || value === null) return false;
   const obj = value as Record<string, unknown>;
-  return typeof obj.type === "string" && typeof obj.sdp === "string";
+  return (
+    typeof obj.type === "string" &&
+    VALID_SDP_TYPES.has(obj.type) &&
+    typeof obj.sdp === "string"
+  );
 }
 
 export class WebTorrentClient {
   static readonly #DEFAULT_ANNOUNCE_INTERVAL_SECONDS = 120;
+  static readonly #MIN_ANNOUNCE_INTERVAL_SECONDS = 20;
   static readonly #ICE_GATHERING_TIMEOUT = 5_000;
 
   readonly #config: Required<
@@ -97,7 +104,9 @@ export class WebTorrentClient {
 
   #announceTimeoutId: ReturnType<typeof setTimeout> | null = null;
   #announceIntervalSeconds: number | null = null;
-  #announceRunId = 0;
+  #scheduleAnnounceRunId = 0;
+  #activeAnnouncePromise: Promise<void> | null = null;
+  #nextAnnounceEvent: "started" | undefined = undefined;
   #trackerId: string | null = null;
   #started = false;
 
@@ -217,6 +226,12 @@ export class WebTorrentClient {
     if (typeof msg !== "object" || msg === null || Array.isArray(msg)) return;
     const dataObject = msg as Record<string, unknown>;
 
+    // Ignore messages for a different torrent (possible on shared WebSocket connections)
+    const infoHash = dataObject.info_hash;
+    if (typeof infoHash === "string" && infoHash !== this.#config.infoHash) {
+      return;
+    }
+
     const warningMessage = dataObject["warning message"];
     if (typeof warningMessage === "string") {
       this.#eventTarget.dispatchEvent("warning", warningMessage);
@@ -230,8 +245,13 @@ export class WebTorrentClient {
 
     const { interval } = dataObject;
     if (typeof interval === "number" && interval > 0) {
-      if (this.#announceIntervalSeconds !== interval) {
-        this.#scheduleAnnounce(interval);
+      // Defend against trackers asking for extremely frequent announces
+      const safeInterval = Math.max(
+        WebTorrentClient.#MIN_ANNOUNCE_INTERVAL_SECONDS,
+        interval,
+      );
+      if (this.#announceIntervalSeconds !== safeInterval) {
+        this.#scheduleAnnounce(safeInterval);
       }
     }
 
@@ -241,12 +261,6 @@ export class WebTorrentClient {
     const trackerId = dataObject["tracker id"];
     if (typeof trackerId === "string") {
       this.#trackerId = trackerId;
-    }
-
-    // Ignore messages for a different torrent (possible on shared WebSocket connections)
-    const infoHash = dataObject.info_hash;
-    if (typeof infoHash === "string" && infoHash !== this.#config.infoHash) {
-      return;
     }
 
     // Ignore offers/answers from ourselves
@@ -290,7 +304,7 @@ export class WebTorrentClient {
     this.#clearAnnounceTimeout();
     this.#announceIntervalSeconds = intervalSeconds;
 
-    const runId = ++this.#announceRunId;
+    const runId = ++this.#scheduleAnnounceRunId;
 
     const run = async () => {
       try {
@@ -306,7 +320,7 @@ export class WebTorrentClient {
       if (
         !this.#isDestroyed() &&
         this.#announceIntervalSeconds !== null &&
-        this.#announceRunId === runId
+        this.#scheduleAnnounceRunId === runId
       ) {
         this.#announceTimeoutId = setTimeout(
           run,
@@ -328,51 +342,80 @@ export class WebTorrentClient {
   async #announce(event?: "started"): Promise<void> {
     if (this.#isDestroyed() || this.#wsClient.state !== "connected") return;
 
-    const shouldGenerateOffers = this.#config.shouldGenerateOffers();
-    const offersCount = shouldGenerateOffers ? this.#config.offersCount : 0;
+    if (event) {
+      this.#nextAnnounceEvent = event;
+    }
 
-    // Generate offers in parallel to avoid sequential ICE gathering latency
-    // Don't use Promise.allSettled to support older browsers
-    const results = await Promise.all(
-      Array.from({ length: offersCount }, () =>
-        this.#createOffer().then(
-          (value) => value,
-          () => undefined,
-        ),
-      ),
-    );
+    if (this.#activeAnnouncePromise) {
+      return this.#activeAnnouncePromise;
+    }
 
-    if (this.#isDestroyed()) {
+    const promise = (async () => {
+      const shouldGenerateOffers = this.#config.shouldGenerateOffers();
+      const offersCount = shouldGenerateOffers ? this.#config.offersCount : 0;
+
+      // Generate offers in parallel to avoid sequential ICE gathering latency.
+      // Each #createOffer() internally catches its own errors and returns
+      // undefined on failure, so Promise.all() will never reject here.
+      // We avoid Promise.allSettled() for older browser compatibility.
+      const results = await Promise.all(
+        Array.from({ length: offersCount }, () => this.#createOffer()),
+      );
+
+      if (this.#isDestroyed()) {
+        for (const result of results) {
+          if (result) {
+            this.#cleanupPendingOffer(result.offer_id);
+          }
+        }
+        return;
+      }
+
+      const offers: {
+        offer: { type: string; sdp: string };
+        offer_id: string;
+      }[] = [];
+
       for (const result of results) {
         if (result) {
-          this.#cleanupPendingOffer(result.offer_id);
+          offers.push(result);
         }
       }
-      return;
-    }
 
-    const offers: { offer: { type: string; sdp: string }; offer_id: string }[] =
-      [];
+      const currentEvent = this.#nextAnnounceEvent;
+      this.#nextAnnounceEvent = undefined;
 
-    for (const result of results) {
-      if (result) {
-        offers.push(result);
+      const payload = this.#buildAnnouncePayload({
+        numwant: offers.length,
+        offers,
+        event: currentEvent,
+      });
+
+      if (this.#wsClient.state !== "connected") {
+        for (const offer of offers) {
+          this.#cleanupPendingOffer(offer.offer_id);
+        }
+        return;
       }
-    }
 
-    const payload = this.#buildAnnouncePayload({
-      numwant: offers.length,
-      offers,
-      event,
-    });
+      try {
+        this.#wsClient.send(JSON.stringify(payload));
+      } catch (err: unknown) {
+        for (const offer of offers) {
+          this.#cleanupPendingOffer(offer.offer_id);
+        }
+        throw err;
+      }
+    })();
+
+    this.#activeAnnouncePromise = promise;
 
     try {
-      this.#wsClient.send(JSON.stringify(payload));
-    } catch (err: unknown) {
-      for (const offer of offers) {
-        this.#cleanupPendingOffer(offer.offer_id);
+      await promise;
+    } finally {
+      if (this.#activeAnnouncePromise === promise) {
+        this.#activeAnnouncePromise = null;
       }
-      throw err;
     }
   }
 
@@ -432,12 +475,13 @@ export class WebTorrentClient {
           `Failed to create offer: ${err instanceof Error ? err.message : String(err)}`,
         );
       }
-      return undefined;
     } finally {
       if (pc) {
         this.#negotiatingConnections.delete(pc);
       }
     }
+
+    return undefined;
   }
 
   #sendStopped(): void {
@@ -540,12 +584,13 @@ export class WebTorrentClient {
       });
     } catch (err: unknown) {
       pc?.close();
-      if (!this.#isDestroyed()) {
-        this.#eventTarget.dispatchEvent("peerConnectFailed", {
-          peerId: remotePeerId,
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
+      // Always dispatch peerConnectFailed so the Manager can release the peer
+      // from #connectingPeers. Safe to call after destroy: event target is
+      // already cleared, making the dispatch a no-op.
+      this.#eventTarget.dispatchEvent("peerConnectFailed", {
+        peerId: remotePeerId,
+        error: err instanceof Error ? err.message : String(err),
+      });
     } finally {
       if (pc) this.#negotiatingConnections.delete(pc);
     }
@@ -592,12 +637,13 @@ export class WebTorrentClient {
       });
     } catch (err: unknown) {
       pending.connection.close();
-      if (!this.#isDestroyed()) {
-        this.#eventTarget.dispatchEvent("peerConnectFailed", {
-          peerId: remotePeerId,
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
+      // Always dispatch peerConnectFailed so the Manager can release the peer
+      // from #connectingPeers. Safe to call after destroy: event target is
+      // already cleared, making the dispatch a no-op.
+      this.#eventTarget.dispatchEvent("peerConnectFailed", {
+        peerId: remotePeerId,
+        error: err instanceof Error ? err.message : String(err),
+      });
     } finally {
       this.#negotiatingConnections.delete(pending.connection);
     }

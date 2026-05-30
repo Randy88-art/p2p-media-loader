@@ -10,6 +10,9 @@ export interface WebTorrentManagerConfig {
   rtcConfig?: RTCConfiguration;
   channelConfig?: RTCDataChannelInit;
   socketPool: WebTorrentSocketPool;
+  offersCount?: number;
+  offerTimeout?: number;
+  connectionTimeout?: number;
 }
 
 export type WebTorrentManagerEventMap = {
@@ -99,79 +102,85 @@ export class WebTorrentManager {
         const { client: wsClient, release } =
           this.#config.socketPool.acquire(url);
 
-        let client: WebTorrentClient;
+        let addedToClients = false;
         try {
-          client = new WebTorrentClient({
+          const client = new WebTorrentClient({
             infoHash: this.#config.infoHash,
             peerId: this.#config.peerId,
             wsClient,
             rtcConfig: this.#config.rtcConfig,
             channelConfig: this.#config.channelConfig,
             claimPeer: this.#claimPeer,
+            offersCount: this.#config.offersCount,
+            offerTimeout: this.#config.offerTimeout,
+            connectionTimeout: this.#config.connectionTimeout,
           });
+
+          const onPeerConnected = (event: {
+            peerId: string;
+            connection: RTCPeerConnection;
+            channel: RTCDataChannel;
+          }) => {
+            this.#connectingPeers.delete(event.peerId);
+            this.#addConnectedPeer(
+              event.peerId,
+              event.connection,
+              event.channel,
+              url,
+            );
+          };
+
+          const onPeerConnectFailed = (event: {
+            peerId: string;
+            error: string;
+          }) => {
+            if (this.#connectingPeers.has(event.peerId)) {
+              this.#connectingPeers.delete(event.peerId);
+              this.#eventTarget.dispatchEvent("peerConnectFailed", {
+                peerId: event.peerId,
+                trackerUrl: url,
+                error: `Connection failed: ${event.error}`,
+              });
+            }
+          };
+
+          const onWarning = (warning: string) => {
+            this.#eventTarget.dispatchEvent("warning", {
+              trackerUrl: url,
+              warning,
+            });
+          };
+
+          const onError = (error: string) => {
+            this.#eventTarget.dispatchEvent("error", { trackerUrl: url, error });
+          };
+
+          client.addEventListener("peerConnected", onPeerConnected);
+          client.addEventListener("peerConnectFailed", onPeerConnectFailed);
+          client.addEventListener("warning", onWarning);
+          client.addEventListener("error", onError);
+
+          const cleanupListeners = () => {
+            client.removeEventListener("peerConnected", onPeerConnected);
+            client.removeEventListener("peerConnectFailed", onPeerConnectFailed);
+            client.removeEventListener("warning", onWarning);
+            client.removeEventListener("error", onError);
+          };
+
+          this.#clients.add({
+            client,
+            releaseSocket: release,
+            cleanupListeners,
+          });
+          addedToClients = true;
+
+          client.start();
         } catch (error) {
-          release();
+          if (!addedToClients) {
+            release();
+          }
           throw error;
         }
-
-        const onPeerConnected = (event: {
-          peerId: string;
-          connection: RTCPeerConnection;
-          channel: RTCDataChannel;
-        }) => {
-          this.#connectingPeers.delete(event.peerId);
-          this.#addConnectedPeer(
-            event.peerId,
-            event.connection,
-            event.channel,
-            url,
-          );
-        };
-
-        const onPeerConnectFailed = (event: {
-          peerId: string;
-          error: string;
-        }) => {
-          if (this.#connectingPeers.has(event.peerId)) {
-            this.#connectingPeers.delete(event.peerId);
-            this.#eventTarget.dispatchEvent("peerConnectFailed", {
-              peerId: event.peerId,
-              trackerUrl: url,
-              error: `Connection failed: ${event.error}`,
-            });
-          }
-        };
-
-        const onWarning = (warning: string) => {
-          this.#eventTarget.dispatchEvent("warning", {
-            trackerUrl: url,
-            warning,
-          });
-        };
-
-        const onError = (error: string) => {
-          this.#eventTarget.dispatchEvent("error", { trackerUrl: url, error });
-        };
-
-        client.addEventListener("peerConnected", onPeerConnected);
-        client.addEventListener("peerConnectFailed", onPeerConnectFailed);
-        client.addEventListener("warning", onWarning);
-        client.addEventListener("error", onError);
-
-        const cleanupListeners = () => {
-          client.removeEventListener("peerConnected", onPeerConnected);
-          client.removeEventListener("peerConnectFailed", onPeerConnectFailed);
-          client.removeEventListener("warning", onWarning);
-          client.removeEventListener("error", onError);
-        };
-
-        this.#clients.add({
-          client,
-          releaseSocket: release,
-          cleanupListeners,
-        });
-
-        client.start();
       }
     } catch (error) {
       this.destroy();
@@ -200,7 +209,16 @@ export class WebTorrentManager {
 
     for (const [peerId, peer] of connectedSnapshot) {
       peer.cleanup();
-      peer.connection.close();
+      try {
+        peer.channel.close();
+      } catch {
+        // ignore
+      }
+      try {
+        peer.connection.close();
+      } catch {
+        // ignore
+      }
       this.#eventTarget.dispatchEvent("peerDisconnected", {
         peerId,
         trackerUrl: peer.trackerUrl,
@@ -216,17 +234,29 @@ export class WebTorrentManager {
     if (this.#destroyed) return;
 
     const connected = this.#connectedPeers.get(peerId);
-    if (connected) {
-      connected.cleanup();
-      connected.connection.close();
-      this.#connectedPeers.delete(peerId);
-      this.#eventTarget.dispatchEvent("peerDisconnected", {
-        peerId,
-        trackerUrl: connected.trackerUrl,
-        reason,
-        isError,
-      });
+    if (!connected) return;
+
+    // Synchronously extract from map first to prevent re-entrant double-fire
+    // if close() synchronously triggers event listeners.
+    this.#connectedPeers.delete(peerId);
+
+    connected.cleanup();
+    try {
+      connected.channel.close();
+    } catch {
+      // ignore
     }
+    try {
+      connected.connection.close();
+    } catch {
+      // ignore
+    }
+    this.#eventTarget.dispatchEvent("peerDisconnected", {
+      peerId,
+      trackerUrl: connected.trackerUrl,
+      reason,
+      isError,
+    });
   }
 
   #addConnectedPeer(
@@ -236,7 +266,11 @@ export class WebTorrentManager {
     trackerUrl: string,
   ): void {
     if (isTerminalConnectionState(connection.iceConnectionState)) {
-      connection.close();
+      try {
+        connection.close();
+      } catch {
+        // ignore
+      }
       this.#eventTarget.dispatchEvent("peerConnectFailed", {
         peerId,
         trackerUrl,

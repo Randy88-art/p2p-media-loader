@@ -1,22 +1,24 @@
-const globalObject =
-  typeof window !== "undefined"
-    ? (window as Omit<Window, "RTCPeerConnection" | "RTCSessionDescription"> & {
-        RTCPeerConnection?: typeof RTCPeerConnection;
-        webkitRTCPeerConnection?: typeof RTCPeerConnection;
-        mozRTCPeerConnection?: typeof RTCPeerConnection;
-        RTCSessionDescription?: typeof RTCSessionDescription;
-        webkitRTCSessionDescription?: typeof RTCSessionDescription;
-        mozRTCSessionDescription?: typeof RTCSessionDescription;
-      })
-    : undefined;
+interface LegacyBrowserWindow extends Window {
+  RTCPeerConnection?: typeof RTCPeerConnection;
+  webkitRTCPeerConnection?: typeof RTCPeerConnection;
+  mozRTCPeerConnection?: typeof RTCPeerConnection;
+  RTCSessionDescription?: typeof RTCSessionDescription;
+  webkitRTCSessionDescription?: typeof RTCSessionDescription;
+  mozRTCSessionDescription?: typeof RTCSessionDescription;
+}
 
-export const PeerConnection = (globalObject?.RTCPeerConnection ??
-  globalObject?.webkitRTCPeerConnection ??
-  globalObject?.mozRTCPeerConnection) as unknown as typeof RTCPeerConnection;
+// Since this library runs exclusively in the browser window context, we target
+// the global 'window' directly. We use a fallback to an empty object for SSR/testing environments.
+const win = (typeof window !== "undefined" ? window : {}) as unknown as LegacyBrowserWindow;
 
-export const SessionDescription = (globalObject?.RTCSessionDescription ??
-  globalObject?.webkitRTCSessionDescription ??
-  globalObject?.mozRTCSessionDescription) as unknown as typeof RTCSessionDescription;
+
+export const PeerConnection = (win.RTCPeerConnection ??
+  win.webkitRTCPeerConnection ??
+  win.mozRTCPeerConnection) as unknown as typeof RTCPeerConnection;
+
+export const SessionDescription = (win.RTCSessionDescription ??
+  win.webkitRTCSessionDescription ??
+  win.mozRTCSessionDescription) as unknown as typeof RTCSessionDescription;
 
 type LegacyRTCPeerConnection = Omit<
   RTCPeerConnection,
@@ -60,12 +62,17 @@ type LegacyRTCPeerConnection = Omit<
  * during runtime connection negotiations, avoiding unnecessary exception-handling overhead.
  */
 const supportsPromiseWebRTC = (() => {
+  // Guard for SSR/test environments where no WebRTC APIs exist
+  if (!win.RTCPeerConnection && !win.webkitRTCPeerConnection && !win.mozRTCPeerConnection) {
+    return false;
+  }
   let pc: RTCPeerConnection | undefined;
   try {
     pc = new PeerConnection();
     const p = pc.createOffer();
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     if (typeof p?.then === "function") {
+      p.catch(() => { /* suppress unhandled rejection from probe */ });
       return true;
     }
   } catch {

@@ -13,7 +13,7 @@ export class EventTarget<
   ) {
     const listeners = this.events.get(eventName);
     if (!listeners) return;
-    for (const listener of listeners) {
+    for (const listener of [...listeners]) {
       try {
         listener(...args);
       } catch {
@@ -32,7 +32,7 @@ export class EventTarget<
     const definedListeners = listeners;
 
     return (...args: Parameters<EventTypesMap[K]>) => {
-      for (const listener of definedListeners) {
+      for (const listener of [...definedListeners]) {
         try {
           listener(...args);
         } catch {

@@ -21,12 +21,15 @@ While a `WebTorrentClient` handles signaling for exactly **one** tracker, a real
 
 ```typescript
 interface WebTorrentManagerConfig {
-  infoHash: string; // 20-byte hex string representing the torrent
-  peerId: string; // 20-byte hex string representing this client
+  infoHash: string; // 20-character ASCII string representing the torrent (derived from Base64 hash)
+  peerId: string; // 20-byte string representing this client
   trackerUrls: string[]; // Array of WebSocket tracker URLs to connect to
   rtcConfig?: RTCConfiguration; // WebRTC STUN/TURN configuration
   channelConfig?: RTCDataChannelInit; // Data Channel configuration
   socketPool: WebTorrentSocketPool; // Shared socket pool
+  offerTimeout?: number; // Time (in ms) to keep unanswered offers before destroying them. Default: 50000.
+  offersCount?: number; // Maximum number of offers to generate per announce interval. Default: 5.
+  connectionTimeout?: number; // Time (in ms) to wait for the data channel to open. Default: 15000.
 }
 ```
 

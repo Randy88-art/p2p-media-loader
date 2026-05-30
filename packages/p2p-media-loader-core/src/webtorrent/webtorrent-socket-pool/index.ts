@@ -54,21 +54,20 @@ export class WebTorrentSocketPool {
         if (isReleased) return;
         isReleased = true;
 
-        // Ensure we are decrementing the current entry in the map
-        const currentEntry = this.#sockets.get(url);
-        if (!currentEntry) return;
+        entry.refCount--;
 
-        currentEntry.refCount--;
-
-        if (currentEntry.refCount <= 0) {
-          if (currentEntry.refCount < 0) {
+        if (entry.refCount <= 0) {
+          if (entry.refCount < 0) {
             // eslint-disable-next-line no-console
             console.error(
               `[WebTorrentSocketPool] Negative refCount detected for ${url}`,
             );
           }
-          this.#sockets.delete(url);
-          currentEntry.client.dispose();
+          const currentEntry = this.#sockets.get(url);
+          if (currentEntry === entry) {
+            this.#sockets.delete(url);
+          }
+          entry.client.dispose();
         }
       },
     };

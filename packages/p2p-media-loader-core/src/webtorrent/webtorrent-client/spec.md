@@ -24,8 +24,8 @@ The `WebTorrentClient` acts as a signaling layer using the `WebSocketClient` und
 ```typescript
 interface WebTorrentClientConfig {
   wsClient: WebSocketClient; // The underlying WebSocket client
-  infoHash: string; // 20-byte hex string representing the torrent
-  peerId: string; // 20-byte hex string representing this client
+  infoHash: string; // 20-character ASCII string representing the torrent (derived from Base64 hash)
+  peerId: string; // 20-byte string representing this client
   rtcConfig?: RTCConfiguration; // Optional custom STUN/TURN server configuration
   channelConfig?: RTCDataChannelInit; // Optional Data Channel overrides
   offerTimeout?: number; // Time (in ms) to keep unanswered offers before destroying them. Default: 50000 (50s).
