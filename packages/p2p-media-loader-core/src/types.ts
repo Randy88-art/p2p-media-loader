@@ -148,6 +148,16 @@ export type CommonCoreConfig = {
    * ```
    */
   customSegmentStorageFactory?: (isLive: boolean) => SegmentStorage;
+
+  /**
+   * Prefix to use for the WebTorrent client version in tracker communications.
+   *
+   * @default
+   * ```typescript
+   * trackerClientVersionPrefix: `-PM${formattedPackageVersion}-`
+   * ```
+   */
+  trackerClientVersionPrefix: string;
 };
 
 /**
@@ -382,17 +392,6 @@ export type StreamConfig = {
    * ```
    */
   rtcConfig: RTCConfiguration;
-
-  /**
-   * Prefix to use for the WebTorrent client version in tracker communications.
-   * If undefined, the default version prefix is used, which is calculated based on the package version.
-   *
-   * @default
-   * ```typescript
-   * trackerClientVersionPrefix: undefined
-   * ```
-   */
-  trackerClientVersionPrefix: string;
 
   /**
    * Optional unique identifier for the swarm, used to isolate peer pools by media stream.
