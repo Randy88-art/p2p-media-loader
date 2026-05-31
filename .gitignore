@@ -10,6 +10,9 @@ lerna-debug.log*
 docs
 node_modules
 /demo/dist
+/demo/public/modules-demo/core
+/demo/public/modules-demo/hlsjs
+/demo/public/modules-demo/shaka
 /packages/*/dist
 /packages/*/lib
 /packages/*/build
