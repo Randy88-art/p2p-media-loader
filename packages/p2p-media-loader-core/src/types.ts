@@ -822,7 +822,10 @@ export type HttpRequestErrorType =
   | "http-segment-validation-failed";
 
 /** Defines the types of errors specific to peer-to-peer requests. */
-export type PeerRequestErrorType = "peer-segment-absent" | "peer-closed";
+export type PeerRequestErrorType =
+  | "peer-segment-absent"
+  | "peer-closed"
+  | "p2p-segment-validation-failed";
 
 /** Enumerates all possible request error types, including HTTP and peer-related errors. */
 export type RequestErrorType =

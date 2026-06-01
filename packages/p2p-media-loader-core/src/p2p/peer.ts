@@ -278,7 +278,7 @@ export class Peer {
         onAbort: () => void 0,
       },
       this.#peerConfig.validateP2PSegment,
-      "peer-closed",
+      "p2p-segment-validation-failed",
     );
 
     if (completed) return;
