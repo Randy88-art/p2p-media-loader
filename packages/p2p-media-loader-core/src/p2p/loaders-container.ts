@@ -31,7 +31,7 @@ export class P2PLoadersContainer {
   readonly #webTorrentSocketPool: WebTorrentSocketPool;
   readonly #eventTarget: EventTarget<CoreEventMap>;
   readonly #peerId: string;
-  #onSegmentAnnouncement: () => void;
+  readonly #onSegmentAnnouncement: () => void;
 
   constructor(
     streamManifestUrl: string,
@@ -83,7 +83,7 @@ export class P2PLoadersContainer {
     return {
       loader,
       stream,
-      loggerInfo: LoggerUtils.getStreamString(stream),
+      loggerInfo,
     };
   }
 

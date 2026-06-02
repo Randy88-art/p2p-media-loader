@@ -173,6 +173,9 @@ export function deserializeCommand(bytes: Uint8Array): PeerCommand {
 
   let offset = 1;
   while (offset < bytes.length) {
+    if (offset + 1 >= bytes.length) {
+      throw new Error("Malformed command buffer: truncated name/type header");
+    }
     const name = String.fromCharCode(bytes[offset]);
     offset++;
     const dataType = getDataTypeFromByte(bytes[offset]);

@@ -156,6 +156,9 @@ export function deserializeString(bytes: Uint8Array) {
     );
   }
   const length = ((codeByte & 0x0f) << 8) | lengthByte;
+  if (bytes.length < length + 2) {
+    throw new Error("Malformed string: buffer too short");
+  }
   const stringBytes = bytes.subarray(2, length + 2);
   const string = textDecoder.decode(stringBytes);
   return { string, byteLength: length + 2 };

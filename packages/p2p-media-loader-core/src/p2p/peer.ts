@@ -298,7 +298,7 @@ export class Peer {
             // Note: This callback is exclusively triggered by Engine-initiated
             // cancellations (e.g., user seeks) or timeouts. It is mutually exclusive
             // from peer-initiated failures, which are handled by #cancelSegmentDownloading.
-            if (!this.#downloadingContext) return;
+            if (!this.#downloadingContext || this.#downloadingContext.request !== segmentRequest) return;
             const { request, requestId } = this.#downloadingContext;
             this.#sendCancelSegmentRequestCommand(request.segment, requestId);
             this.#bandwidthCalculator.stopLoading();
@@ -372,7 +372,7 @@ export class Peer {
         data,
         requestId,
       );
-      if (this.isDestroyed) return;
+      if (this.isDestroyed || requestId !== this.#latestRequestedUploadRequestId) return;
       this.#sendSegmentDataSendingCompletedCommand(segment, requestId);
       this.#logger(`segment ${externalId} has been sent to ${this.id}`);
     } catch (error) {
@@ -450,7 +450,7 @@ export class Peer {
     });
   }
 
-  destroy = (isConnectionClosed = false, error?: PeerError) => {
+  destroy(isConnectionClosed = false, error?: PeerError) {
     if (this.#isDestroyed) return;
     this.#isDestroyed = true;
 
@@ -461,7 +461,7 @@ export class Peer {
       this.#closeConnection(error);
     }
     this.#logger(`peer closed ${this.id}`);
-  };
+  }
 
   #sendCommand(command: Command.PeerCommand): boolean {
     if (this.#isDestroyed) return false;
