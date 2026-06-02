@@ -75,7 +75,7 @@ export function deserializeInt(bytes: Uint8Array) {
   };
 }
 
-export function serializeSimilarIntArray(numbers: number[]) {
+export function serializeUniqueSimilarIntArray(numbers: number[]) {
   const commonPartNumbersMap = new Map<number, ResizableUint8Array>();
 
   for (const number of numbers) {
@@ -90,7 +90,7 @@ export function serializeSimilarIntArray(numbers: number[]) {
   result.push([SerializedItem.SimilarIntArray << 4, commonPartNumbersMap.size]);
 
   for (const [commonPart, binaryArray] of commonPartNumbersMap) {
-    const { length } = binaryArray.getBytesChunks();
+    const { length } = binaryArray;
     const commonPartWithLength = commonPart + (length & 0xff);
     binaryArray.unshift(serializeInt(commonPartWithLength));
     result.push(binaryArray.getBuffer());
@@ -99,7 +99,7 @@ export function serializeSimilarIntArray(numbers: number[]) {
   return result.getBuffer();
 }
 
-export function deserializeSimilarIntArray(bytes: Uint8Array) {
+export function deserializeUniqueSimilarIntArray(bytes: Uint8Array) {
   if (bytes.length < 2) throw new Error("Buffer is too short");
   const [codeByte, commonPartArraysAmount] = bytes;
   const code: SerializedItem = codeByte >> 4;
@@ -117,9 +117,10 @@ export function deserializeSimilarIntArray(bytes: Uint8Array) {
     );
     offset += byteLength;
     const arrayLength = commonPartWithLength & 0xff;
+    const actualLength = arrayLength === 0 ? 256 : arrayLength;
     const commonPart = commonPartWithLength - arrayLength;
 
-    for (let j = 0; j < arrayLength; j++) {
+    for (let j = 0; j < actualLength; j++) {
       const diffPart = bytes[offset];
       originalIntArr.push(commonPart + diffPart);
       offset++;

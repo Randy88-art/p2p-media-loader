@@ -103,9 +103,9 @@ export class BinaryCommandCreator {
     this.#bytes.push(bytes);
   }
 
-  addSimilarIntArr(name: string, arr: number[]) {
+  addUniqueSimilarIntArr(name: string, arr: number[]) {
     this.#bytes.push(name.charCodeAt(0));
-    const bytes = Serialization.serializeSimilarIntArray(arr);
+    const bytes = Serialization.serializeUniqueSimilarIntArray(arr);
     this.#bytes.push(bytes);
   }
 
@@ -190,7 +190,7 @@ export function deserializeCommand(bytes: Uint8Array): PeerCommand {
       case Serialization.SerializedItem.SimilarIntArray:
         {
           const { numbers, byteLength } =
-            Serialization.deserializeSimilarIntArray(bytes.subarray(offset));
+            Serialization.deserializeUniqueSimilarIntArray(bytes.subarray(offset));
           deserializedCommand[name] = numbers;
           offset += byteLength;
         }

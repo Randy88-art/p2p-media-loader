@@ -31,4 +31,48 @@ describe("binary-serialization", () => {
       );
     });
   });
+
+  describe("serializeUniqueSimilarIntArray and deserializeUniqueSimilarIntArray", () => {
+    // Tests for serializeUniqueSimilarIntArray
+    it("should correctly serialize and deserialize a small array of unique integers", async () => {
+      const { serializeUniqueSimilarIntArray, deserializeUniqueSimilarIntArray } = await import("../src/p2p/commands/binary-serialization.js");
+      const original = [1, 5, 10, 256, 258, 512];
+      const serialized = serializeUniqueSimilarIntArray(original);
+      const deserialized = deserializeUniqueSimilarIntArray(serialized);
+      expect(deserialized.numbers).toEqual(original);
+    });
+
+    it("should correctly serialize and deserialize exactly 256 contiguous integers (edge case fixed)", async () => {
+      const { serializeUniqueSimilarIntArray, deserializeUniqueSimilarIntArray } = await import("../src/p2p/commands/binary-serialization.js");
+      const original = Array.from({ length: 256 }, (_, i) => i);
+      const serialized = serializeUniqueSimilarIntArray(original);
+      const deserialized = deserializeUniqueSimilarIntArray(serialized);
+      expect(deserialized.numbers).toEqual(original);
+    });
+
+    it("should correctly serialize and deserialize exactly 256 contiguous integers starting at an offset", async () => {
+      const { serializeUniqueSimilarIntArray, deserializeUniqueSimilarIntArray } = await import("../src/p2p/commands/binary-serialization.js");
+      const original = Array.from({ length: 256 }, (_, i) => i + 512);
+      const serialized = serializeUniqueSimilarIntArray(original);
+      const deserialized = deserializeUniqueSimilarIntArray(serialized);
+      expect(deserialized.numbers).toEqual(original);
+    });
+
+    it("should correctly serialize and deserialize exactly 256 contiguous integers with other disjoint integers", async () => {
+      const { serializeUniqueSimilarIntArray, deserializeUniqueSimilarIntArray } = await import("../src/p2p/commands/binary-serialization.js");
+      const contiguous = Array.from({ length: 256 }, (_, i) => i + 256);
+      const original = [1, 2, ...contiguous, 1024, 1025];
+      const serialized = serializeUniqueSimilarIntArray(original);
+      const deserialized = deserializeUniqueSimilarIntArray(serialized);
+      expect(deserialized.numbers).toEqual(original);
+    });
+
+    it("should correctly serialize and deserialize > 256 contiguous integers (spanning multiple 256-item buckets)", async () => {
+      const { serializeUniqueSimilarIntArray, deserializeUniqueSimilarIntArray } = await import("../src/p2p/commands/binary-serialization.js");
+      const original = Array.from({ length: 1000 }, (_, i) => i);
+      const serialized = serializeUniqueSimilarIntArray(original);
+      const deserialized = deserializeUniqueSimilarIntArray(serialized);
+      expect(deserialized.numbers).toEqual(original);
+    });
+  });
 });
