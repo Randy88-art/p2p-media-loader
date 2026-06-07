@@ -72,32 +72,45 @@ describe("binary-serialization", () => {
     it("should throw an error when deserializing an empty buffer", () => {
       expect(() => deserializeInt(new Uint8Array(0))).toThrow("Buffer is too short");
     });
+
+    it("should correctly serialize and deserialize zero", () => {
+      const serialized = serializeInt(0);
+      const deserialized = deserializeInt(serialized);
+      expect(deserialized.number).toBe(0);
+      expect(deserialized.byteLength).toBe(serialized.length);
+    });
+
+    it("should throw an error when metadata has zero byte length", () => {
+      // Crafted byte: SerializedItem.Int (0) << 4 | 0 = 0x00
+      const malformed = new Uint8Array([0x00]);
+      expect(() => deserializeInt(malformed)).toThrow("Invalid integer: zero byte length");
+    });
   });
 
   describe("serializeUniqueSimilarIntArray and deserializeUniqueSimilarIntArray", () => {
     // Tests for serializeUniqueSimilarIntArray
-    it("should correctly serialize and deserialize a small array of unique integers", async () => {
+    it("should correctly serialize and deserialize a small array of unique integers", () => {
       const original = [1, 5, 10, 256, 258, 512];
       const serialized = serializeUniqueSimilarIntArray(original);
       const deserialized = deserializeUniqueSimilarIntArray(serialized);
       expect(deserialized.numbers).toEqual(original);
     });
 
-    it("should correctly serialize and deserialize exactly 256 contiguous integers (edge case fixed)", async () => {
+    it("should correctly serialize and deserialize exactly 256 contiguous integers (edge case fixed)", () => {
       const original = Array.from({ length: 256 }, (_, i) => i);
       const serialized = serializeUniqueSimilarIntArray(original);
       const deserialized = deserializeUniqueSimilarIntArray(serialized);
       expect(deserialized.numbers).toEqual(original);
     });
 
-    it("should correctly serialize and deserialize exactly 256 contiguous integers starting at an offset", async () => {
+    it("should correctly serialize and deserialize exactly 256 contiguous integers starting at an offset", () => {
       const original = Array.from({ length: 256 }, (_, i) => i + 512);
       const serialized = serializeUniqueSimilarIntArray(original);
       const deserialized = deserializeUniqueSimilarIntArray(serialized);
       expect(deserialized.numbers).toEqual(original);
     });
 
-    it("should correctly serialize and deserialize exactly 256 contiguous integers with other disjoint integers", async () => {
+    it("should correctly serialize and deserialize exactly 256 contiguous integers with other disjoint integers", () => {
       const contiguous = Array.from({ length: 256 }, (_, i) => i + 256);
       const original = [1, 2, ...contiguous, 1024, 1025];
       const serialized = serializeUniqueSimilarIntArray(original);
@@ -105,7 +118,7 @@ describe("binary-serialization", () => {
       expect(deserialized.numbers).toEqual(original);
     });
 
-    it("should correctly serialize and deserialize > 256 contiguous integers (spanning multiple 256-item buckets)", async () => {
+    it("should correctly serialize and deserialize > 256 contiguous integers (spanning multiple 256-item buckets)", () => {
       const original = Array.from({ length: 1000 }, (_, i) => i);
       const serialized = serializeUniqueSimilarIntArray(original);
       const deserialized = deserializeUniqueSimilarIntArray(serialized);
@@ -138,8 +151,24 @@ describe("binary-serialization", () => {
     });
   });
 
+  describe("serializeUniqueSimilarIntArray edge cases", () => {
+    it("should correctly serialize and deserialize an empty array", () => {
+      const original: number[] = [];
+      const serialized = serializeUniqueSimilarIntArray(original);
+      const deserialized = deserializeUniqueSimilarIntArray(serialized);
+      expect(deserialized.numbers).toEqual(original);
+    });
+
+    it("should correctly serialize and deserialize a single-element array", () => {
+      const original = [42];
+      const serialized = serializeUniqueSimilarIntArray(original);
+      const deserialized = deserializeUniqueSimilarIntArray(serialized);
+      expect(deserialized.numbers).toEqual(original);
+    });
+  });
+
   describe("serializeString and deserializeString", () => {
-    it("should correctly serialize and deserialize a string", async () => {
+    it("should correctly serialize and deserialize a string", () => {
       const original = "https://example.com/playlist.m3u8";
       const serialized = serializeString(original);
       const deserialized = deserializeString(serialized);
@@ -147,7 +176,7 @@ describe("binary-serialization", () => {
       expect(deserialized.byteLength).toBe(serialized.byteLength);
     });
 
-    it("deserializeString should throw error on malformed buffer (too short)", async () => {
+    it("deserializeString should throw error on malformed buffer (too short)", () => {
       // codeByte = SerializedItem.String << 4 = 2 << 4 = 32
       // lengthByte = 5
       const bytes = new Uint8Array([32, 5, 97, 98, 99]); // only 3 chars, expected 5
@@ -158,7 +187,7 @@ describe("binary-serialization", () => {
   });
 
   describe("deserializeCommand", () => {
-    it("should correctly serialize and deserialize a command", async () => {
+    it("should correctly serialize and deserialize a command", () => {
       const creator = new BinaryCommandCreator(1, 1024); // PeerCommandType.SegmentRequest, maxChunkLength=1024
       creator.addInteger("i", 100);
       creator.addInteger("r", 50);
@@ -182,7 +211,7 @@ describe("binary-serialization", () => {
       }
     });
 
-    it("deserializeCommand should throw error on truncated name/type header", async () => {
+    it("deserializeCommand should throw error on truncated name/type header", () => {
       const bytes = new Uint8Array([1, 105]); // commandCode, then name 'i', but no type byte
       expect(() => deserializeCommand(bytes)).toThrow(
         "Malformed command buffer: truncated name/type header",

@@ -67,6 +67,9 @@ export function deserializeInt(bytes: Uint8Array) {
     );
   }
   const numberBytesLength = metadata & 0b1111;
+  if (numberBytesLength === 0) {
+    throw new Error("Invalid integer: zero byte length");
+  }
   const start = 1;
   const end = start + numberBytesLength;
   if (bytes.length < end) {
