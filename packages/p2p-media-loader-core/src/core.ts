@@ -479,11 +479,16 @@ export class Core<TStream extends Stream = Stream> {
         ? createCustomStorage(isLive)
         : new SegmentMemoryStorage();
 
-      await segmentStorage.initialize(
-        this.commonCoreConfig,
-        this.mainStreamConfig,
-        this.secondaryStreamConfig,
-      );
+      try {
+        await segmentStorage.initialize(
+          this.commonCoreConfig,
+          this.mainStreamConfig,
+          this.secondaryStreamConfig,
+        );
+      } catch (error) {
+        segmentStorage.destroy();
+        throw error;
+      }
 
       if (!this.storageInitPromise) {
         segmentStorage.setSegmentChangeCallback(undefined);
