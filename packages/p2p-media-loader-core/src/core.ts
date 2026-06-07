@@ -101,6 +101,7 @@ export class Core<TStream extends Stream = Stream> {
     isLive: false,
     activeLevelBitrate: 0,
   };
+  private storageInitPromise?: Promise<void>;
 
   /**
    * Constructs a new Core instance with optional initial configuration.
@@ -457,39 +458,55 @@ export class Core<TStream extends Stream = Stream> {
     this.segmentStorage = undefined;
     this.manifestResponseUrl = undefined;
     this.streamDetails = { isLive: false, activeLevelBitrate: 0 };
+    this.storageInitPromise = undefined;
     this.webTorrentSocketPool.destroy();
   }
 
   private async initializeSegmentStorage() {
     if (this.segmentStorage) return;
+    if (this.storageInitPromise) return this.storageInitPromise;
 
-    const { isLive } = this.streamDetails;
-    const createCustomStorage =
-      this.commonCoreConfig.customSegmentStorageFactory;
+    this.storageInitPromise = (async () => {
+      const { isLive } = this.streamDetails;
+      const createCustomStorage =
+        this.commonCoreConfig.customSegmentStorageFactory;
 
-    if (createCustomStorage && typeof createCustomStorage !== "function") {
-      throw new Error("Storage configuration is invalid");
+      if (createCustomStorage && typeof createCustomStorage !== "function") {
+        throw new Error("Storage configuration is invalid");
+      }
+
+      const segmentStorage = createCustomStorage
+        ? createCustomStorage(isLive)
+        : new SegmentMemoryStorage();
+
+      await segmentStorage.initialize(
+        this.commonCoreConfig,
+        this.mainStreamConfig,
+        this.secondaryStreamConfig,
+      );
+
+      if (!this.storageInitPromise) {
+        segmentStorage.setSegmentChangeCallback(undefined);
+        segmentStorage.destroy();
+        return;
+      }
+
+      segmentStorage.setSegmentChangeCallback((streamId: string) => {
+        (
+          this.eventTarget as unknown as EventTarget<
+            CoreEventMap & Record<`onStorageUpdated-${string}`, () => void>
+          >
+        ).dispatchEvent(`onStorageUpdated-${streamId}`);
+      });
+
+      this.segmentStorage = segmentStorage;
+    })();
+
+    try {
+      await this.storageInitPromise;
+    } finally {
+      this.storageInitPromise = undefined;
     }
-
-    const segmentStorage = createCustomStorage
-      ? createCustomStorage(isLive)
-      : new SegmentMemoryStorage();
-
-    await segmentStorage.initialize(
-      this.commonCoreConfig,
-      this.mainStreamConfig,
-      this.secondaryStreamConfig,
-    );
-
-    segmentStorage.setSegmentChangeCallback((streamId: string) => {
-      (
-        this.eventTarget as unknown as EventTarget<
-          CoreEventMap & Record<`onStorageUpdated-${string}`, () => void>
-        >
-      ).dispatchEvent(`onStorageUpdated-${streamId}`);
-    });
-
-    this.segmentStorage = segmentStorage;
   }
 
   private identifySegment(segmentRuntimeId: string): SegmentWithStream {

@@ -113,7 +113,7 @@ export class SegmentManager {
       return;
     }
 
-    if (!lastMediaSequence) return;
+    if (lastMediaSequence === undefined) return;
     let mediaSequence = lastMediaSequence;
 
     for (const reference of itemsBackwards(segmentReferences)) {

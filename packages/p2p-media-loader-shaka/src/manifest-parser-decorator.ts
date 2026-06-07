@@ -254,7 +254,7 @@ export class ManifestParserDecorator implements shaka.extern.ManifestParser {
           (videoStream as HookedStream).mediaSequenceTimeMap = videoMap;
         }
         if (audioStream) {
-          (audioStream as HookedStream).mediaSequenceTimeMap = videoMap;
+          (audioStream as HookedStream).mediaSequenceTimeMap = audioMap;
         }
       }
       return;
