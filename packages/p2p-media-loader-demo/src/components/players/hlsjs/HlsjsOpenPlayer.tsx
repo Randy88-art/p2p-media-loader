@@ -19,6 +19,7 @@ export const HlsjsOpenPlayer = ({
   useEffect(() => {
     if (!playerContainerRef.current || !Hls.isSupported()) return;
 
+    const prevHls = window.Hls;
     window.Hls = HlsJsP2PEngine.injectMixin(Hls);
 
     let isCleanedUp = false;
@@ -35,7 +36,7 @@ export const HlsjsOpenPlayer = ({
       player?.destroy();
       videoElement.remove();
       videoContainer.remove();
-      window.Hls = undefined;
+      window.Hls = prevHls;
     };
 
     const initPlayer = async () => {

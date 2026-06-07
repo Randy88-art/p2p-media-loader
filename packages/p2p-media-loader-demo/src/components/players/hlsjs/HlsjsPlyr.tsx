@@ -46,7 +46,7 @@ export const HlsjsPlyr = ({
       const { levels } = hls;
 
       const quality: PlyrModule.Options["quality"] = {
-        default: levels[levels.length - 1].height,
+        default: levels[levels.length - 1]?.height ?? 0,
         options: levels.map((level) => level.height),
         forced: true,
         onChange: (newQuality: number) => {

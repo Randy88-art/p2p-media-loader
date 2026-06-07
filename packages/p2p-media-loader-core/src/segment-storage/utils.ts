@@ -7,4 +7,5 @@ export const isIPadOrIPhone = (userAgent: string) =>
   /iPad|iPhone/i.test(userAgent);
 
 export const isAndroidWebview = (userAgent: string) =>
-  /Android/i.test(userAgent) && !/Chrome|Firefox/i.test(userAgent);
+  /Android/i.test(userAgent) &&
+  (/; wv\)/i.test(userAgent) || !/Chrome|Firefox/i.test(userAgent));

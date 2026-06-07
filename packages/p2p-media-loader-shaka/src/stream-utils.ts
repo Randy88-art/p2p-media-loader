@@ -50,11 +50,12 @@ export function getByteRangeFromHeaderString(
 ): ByteRange | undefined {
   if (!rangeStr?.includes("bytes=")) return undefined;
 
-  const range = rangeStr
-    .split("=")[1]
-    .split("-")
-    .map((i) => parseInt(i));
-  const [start, end] = range;
+  const parts = rangeStr.split("=")[1].split("-");
+  const start = parseInt(parts[0]);
+  const end = parseInt(parts[1]);
+
+  if (isNaN(start) || isNaN(end)) return undefined;
+
   return { start, end };
 }
 

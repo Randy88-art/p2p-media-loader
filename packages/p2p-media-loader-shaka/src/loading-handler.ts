@@ -36,7 +36,7 @@ export class Loader {
 
     const loading = this.defaultLoad() as LoadingHandlerResult;
     if (requestType === RequestType.MANIFEST) {
-      void this.handleManifestLoading(loading.promise);
+      this.handleManifestLoading(loading.promise).catch(() => undefined);
     }
     return loading;
   }
