@@ -70,7 +70,9 @@ describe("binary-serialization", () => {
     });
 
     it("should throw an error when deserializing an empty buffer", () => {
-      expect(() => deserializeInt(new Uint8Array(0))).toThrow("Buffer is too short");
+      expect(() => deserializeInt(new Uint8Array(0))).toThrow(
+        "Buffer is too short",
+      );
     });
 
     it("should correctly serialize and deserialize zero", () => {
@@ -83,13 +85,17 @@ describe("binary-serialization", () => {
     it("should throw an error when metadata has zero byte length", () => {
       // Crafted byte: SerializedItem.Int (0) << 4 | 0 = 0x00
       const malformed = new Uint8Array([0x00]);
-      expect(() => deserializeInt(malformed)).toThrow("Invalid integer: zero byte length");
+      expect(() => deserializeInt(malformed)).toThrow(
+        "Invalid integer: zero byte length",
+      );
     });
 
     it("should throw an error when byte length exceeds 7 bytes", () => {
       // Crafted byte: SerializedItem.Int (0) << 4 | 8 = 0x08
       const malformed = new Uint8Array([0x08, 1, 2, 3, 4, 5, 6, 7, 8]);
-      expect(() => deserializeInt(malformed)).toThrow("Invalid integer: byte length exceeds safe integer limit");
+      expect(() => deserializeInt(malformed)).toThrow(
+        "Invalid integer: byte length exceeds safe integer limit",
+      );
     });
   });
 

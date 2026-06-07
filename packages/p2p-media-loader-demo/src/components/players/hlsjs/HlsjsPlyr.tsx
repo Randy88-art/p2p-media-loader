@@ -45,24 +45,27 @@ export const HlsjsPlyr = ({
     hls.on(Hls.Events.MANIFEST_PARSED, () => {
       const { levels } = hls;
 
-      const quality: PlyrModule.Options["quality"] = {
-        default: levels[levels.length - 1].height,
-        options: levels.map((level) => level.height),
-        forced: true,
-        onChange: (newQuality: number) => {
-          levels.forEach((level, levelIndex) => {
-            if (level.height === newQuality) {
-              hls.currentLevel = levelIndex;
-            }
-          });
-        },
-      };
-
-      player = new PlyrModule.default(videoElement, {
-        quality,
+      const plyrOptions: PlyrModule.Options = {
         autoplay: true,
         muted: true,
-      });
+      };
+
+      if (levels.length > 0) {
+        plyrOptions.quality = {
+          default: levels[levels.length - 1].height,
+          options: levels.map((level) => level.height),
+          forced: true,
+          onChange: (newQuality: number) => {
+            levels.forEach((level, levelIndex) => {
+              if (level.height === newQuality) {
+                hls.currentLevel = levelIndex;
+              }
+            });
+          },
+        };
+      }
+
+      player = new PlyrModule.default(videoElement, plyrOptions);
     });
 
     hls.attachMedia(videoElement);

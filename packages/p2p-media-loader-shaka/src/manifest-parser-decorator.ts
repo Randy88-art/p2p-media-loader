@@ -155,8 +155,8 @@ export class ManifestParserDecorator implements shaka.extern.ManifestParser {
       callFromCreateSegmentIndexMethod = false,
     ) => {
       let prevReference: shaka.media.SegmentReference | null = null;
-      let prevFirstItemReference: shaka.media.SegmentReference;
-      let prevLastItemReference: shaka.media.SegmentReference;
+      let prevFirstItemReference: shaka.media.SegmentReference | undefined;
+      let prevLastItemReference: shaka.media.SegmentReference | undefined;
 
       // eslint-disable-next-line @typescript-eslint/unbound-method
       const originalGet = segmentIndex.get as (

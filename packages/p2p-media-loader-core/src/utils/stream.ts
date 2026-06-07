@@ -129,6 +129,7 @@ export function getSegmentAvgDuration(stream: StreamWithSegments) {
   const { segments } = stream;
   let sumDuration = 0;
   const { size } = segments;
+  if (size === 0) return 0;
   for (const segment of segments.values()) {
     const duration = segment.endTime - segment.startTime;
     sumDuration += duration;

@@ -30,6 +30,7 @@ export const HlsjsMediaElement = ({
 
     containerRef.current.appendChild(videoContainer);
 
+    const prevHls = window.Hls;
     window.Hls = HlsJsP2PEngine.injectMixin(Hls);
 
     // @ts-ignore
@@ -56,7 +57,7 @@ export const HlsjsMediaElement = ({
     player.load();
 
     return () => {
-      window.Hls = undefined;
+      window.Hls = prevHls;
       player?.remove();
       videoContainer.remove();
     };
@@ -68,7 +69,6 @@ export const HlsjsMediaElement = ({
     onPeerConnect,
     onPeerClose,
     streamUrl,
-    
   ]);
 
   return isHlsSupported ? (
