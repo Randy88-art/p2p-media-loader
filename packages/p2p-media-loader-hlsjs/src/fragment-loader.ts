@@ -73,6 +73,8 @@ export class FragmentLoaderBase implements Loader<FragmentLoaderContext> {
     }
 
     const onSuccess = (response: SegmentResponse) => {
+      if (!this.#callbacks) return;
+
       this.#response = response;
       const loadedBytes = this.#response.data.byteLength;
       stats.loading = getLoadingStat(
@@ -88,10 +90,10 @@ export class FragmentLoaderBase implements Loader<FragmentLoaderContext> {
       // to keep our cached ArrayBuffer intact for seeding to other peers.
       const engineData = this.#response.data.slice(0);
 
-      if (callbacks.onProgress) {
-        callbacks.onProgress(this.stats, context, engineData, undefined);
+      if (this.#callbacks.onProgress) {
+        this.#callbacks.onProgress(this.stats, context, engineData, undefined);
       }
-      callbacks.onSuccess(
+      this.#callbacks.onSuccess(
         { data: engineData, url: context.url },
         this.stats,
         context,
