@@ -70,6 +70,9 @@ export function deserializeInt(bytes: Uint8Array) {
   if (numberBytesLength === 0) {
     throw new Error("Invalid integer: zero byte length");
   }
+  if (numberBytesLength > 7) {
+    throw new Error("Invalid integer: byte length exceeds safe integer limit");
+  }
   const start = 1;
   const end = start + numberBytesLength;
   if (bytes.length < end) {
