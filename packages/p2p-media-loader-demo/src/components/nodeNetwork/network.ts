@@ -80,15 +80,20 @@ export const updateGraph = (
     .selectAll<SVGCircleElement, Node>("circle")
     .data(newNodes, getNodeId);
 
-  node
+  const mergedNode = node
     .enter()
     .append("circle")
+    .attr("r", 0)
     .merge(node)
-    .attr("r", (d) => (d.isMain ? 15 : 13))
     .attr("fill", (d) => COLORS.node(d))
     .on("mouseover", handleNodeMouseOver)
     .on("mouseout", handleNodeMouseOut)
     .call(drag(simulation));
+
+  mergedNode
+    .transition()
+    .duration(500)
+    .attr("r", (d) => (d.isMain ? 15 : 13));
 
   node.exit().transition().duration(200).attr("r", 0).remove();
 

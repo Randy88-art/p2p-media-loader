@@ -14,9 +14,9 @@ function serializeSegmentAnnouncementCommand(
 ) {
   const { c: commandCode, p: loadingByHttp, l: loaded } = command;
   const creator = new BinaryCommandCreator(commandCode, maxChunkSize);
-  if (loaded?.length) creator.addSimilarIntArr("l", loaded);
+  if (loaded?.length) creator.addUniqueSimilarIntArr("l", loaded);
   if (loadingByHttp?.length) {
-    creator.addSimilarIntArr("p", loadingByHttp);
+    creator.addUniqueSimilarIntArr("p", loadingByHttp);
   }
   creator.complete();
   return creator.getResultBuffers();

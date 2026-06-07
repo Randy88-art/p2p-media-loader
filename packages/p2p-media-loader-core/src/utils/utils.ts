@@ -1,6 +1,6 @@
 import { CommonCoreConfig, CoreConfig, StreamConfig } from "../types.js";
 
-export function getControlledPromise<T = void>() {
+export function getPromiseWithResolvers<T = void>() {
   let resolve: (value: T) => void;
   let reject: (reason?: unknown) => void;
   const promise = new Promise<T>((res, rej) => {
@@ -15,6 +15,10 @@ export function getControlledPromise<T = void>() {
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     reject: reject!,
   };
+}
+
+export function queueMicrotask(fn: () => void): void {
+  void Promise.resolve().then(fn);
 }
 
 export function joinChunks(chunks: Uint8Array[], totalBytes?: number) {

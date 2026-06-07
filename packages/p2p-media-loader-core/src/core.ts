@@ -1,4 +1,5 @@
 import { HybridLoader } from "./hybrid-loader.js";
+import debug from "debug";
 import {
   Stream,
   CoreConfig,
@@ -25,9 +26,9 @@ import {
   deepCopy,
   filterUndefinedProps,
 } from "./utils/utils.js";
-import { TRACKER_CLIENT_VERSION_PREFIX } from "./utils/peer.js";
+import { TRACKER_CLIENT_VERSION_PREFIX, generatePeerId } from "./utils/peer.js";
 import { SegmentStorage } from "./segment-storage/index.js";
-import { P2PTrackerClient } from "./p2p/tracker-client.js";
+import { WebTorrentSocketPool } from "./webtorrent/webtorrent-socket-pool/index.js";
 
 /** Core class for managing media streams loading via P2P. */
 export class Core<TStream extends Stream = Stream> {
@@ -35,6 +36,7 @@ export class Core<TStream extends Stream = Stream> {
   static readonly DEFAULT_COMMON_CORE_CONFIG: CommonCoreConfig = {
     segmentMemoryStorageLimit: undefined,
     customSegmentStorageFactory: undefined,
+    trackerClientVersionPrefix: TRACKER_CLIENT_VERSION_PREFIX,
   };
 
   /** Default configuration for stream settings. */
@@ -53,7 +55,6 @@ export class Core<TStream extends Stream = Stream> {
     httpNotReceivingBytesTimeoutMs: 3000,
     httpErrorRetries: 3,
     p2pErrorRetries: 3,
-    trackerClientVersionPrefix: TRACKER_CLIENT_VERSION_PREFIX,
     announceTrackers: [
       "wss://tracker.novage.com.ua",
       "wss://tracker.openwebtorrent.com",
@@ -68,6 +69,14 @@ export class Core<TStream extends Stream = Stream> {
     validateHTTPSegment: undefined,
     httpRequestSetup: undefined,
     swarmId: undefined,
+    p2pMaxPeers: 50,
+    p2pChurnMaxPeersMultiplier: 1.5,
+    p2pChurnCleanupIntervalMs: 30000,
+    p2pChurnGracePeriodMs: 15000,
+    webRtcOffersCount: 5,
+    webRtcOfferTimeoutMs: 50000,
+    webRtcIceGatheringTimeoutMs: 5000,
+    webRtcConnectionTimeoutMs: 15000,
   };
 
   private readonly eventTarget = new EventTarget<CoreEventMap>();
@@ -81,6 +90,11 @@ export class Core<TStream extends Stream = Stream> {
     http: new BandwidthCalculator(),
   };
   private segmentStorage?: SegmentStorage;
+  private readonly webTorrentSocketPool = new WebTorrentSocketPool();
+  private readonly socketPoolLogger = debug(
+    "p2pml-core:webtorrent-socket-pool",
+  );
+  private readonly peerId: string;
   private mainStreamLoader?: HybridLoader;
   private secondaryStreamLoader?: HybridLoader;
   private streamDetails: StreamDetails = {
@@ -124,6 +138,14 @@ export class Core<TStream extends Stream = Stream> {
       defaultConfig: Core.DEFAULT_STREAM_CONFIG,
       baseConfig: filteredConfig,
       specificStreamConfig: filteredConfig.secondaryStream,
+    });
+
+    this.peerId = generatePeerId(
+      this.commonCoreConfig.trackerClientVersionPrefix,
+    );
+
+    this.webTorrentSocketPool.addEventListener("error", (error, url) => {
+      this.socketPoolLogger(`WebSocket error for tracker url ${url}:`, error);
     });
   }
 
@@ -428,13 +450,14 @@ export class Core<TStream extends Stream = Stream> {
     this.streams.clear();
     this.mainStreamLoader?.destroy();
     this.secondaryStreamLoader?.destroy();
+    this.segmentStorage?.setSegmentChangeCallback(undefined);
     this.segmentStorage?.destroy();
     this.mainStreamLoader = undefined;
     this.secondaryStreamLoader = undefined;
     this.segmentStorage = undefined;
     this.manifestResponseUrl = undefined;
     this.streamDetails = { isLive: false, activeLevelBitrate: 0 };
-    P2PTrackerClient.clearPeerIdCache();
+    this.webTorrentSocketPool.destroy();
   }
 
   private async initializeSegmentStorage() {
@@ -457,6 +480,14 @@ export class Core<TStream extends Stream = Stream> {
       this.mainStreamConfig,
       this.secondaryStreamConfig,
     );
+
+    segmentStorage.setSegmentChangeCallback((streamId: string) => {
+      (
+        this.eventTarget as unknown as EventTarget<
+          CoreEventMap & Record<`onStorageUpdated-${string}`, () => void>
+        >
+      ).dispatchEvent(`onStorageUpdated-${streamId}`);
+    });
 
     this.segmentStorage = segmentStorage;
   }
@@ -536,7 +567,9 @@ export class Core<TStream extends Stream = Stream> {
       streamConfig,
       this.bandwidthCalculators,
       this.segmentStorage,
+      this.webTorrentSocketPool,
       this.eventTarget,
+      this.peerId,
     );
   }
 }

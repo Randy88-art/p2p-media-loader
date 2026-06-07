@@ -36,7 +36,7 @@ export type RequestControls = Readonly<{
   firstBytesReceived: Request["firstBytesReceived"];
   addLoadedChunk: Request["addLoadedChunk"];
   completeOnSuccess: Request["completeOnSuccess"];
-  abortOnError: Request["abortOnError"];
+  failWithError: Request["failWithError"];
 }>;
 
 type OmitEncapsulated<T extends RequestAttempt> = Omit<
@@ -75,9 +75,10 @@ export class Request {
   private _status: RequestStatus = "not-started";
   private progress?: LoadProgress;
   private notReceivingBytesTimeout: Timeout;
-  private _abortRequestCallback?: (
+  private _onAbortCallback?: (
     error: RequestError<RequestAbortErrorType>,
   ) => void;
+  private notReceivingBytesTimeoutMs?: number;
   private readonly _logger: debug.Debugger;
   private _isHandledByProcessQueue = false;
   private readonly onSegmentError: CoreEventMap["onSegmentError"];
@@ -92,6 +93,7 @@ export class Request {
     private readonly playback: Playback,
     private readonly playbackConfig: StreamUtils.PlaybackTimeWindowsConfig,
     eventTarget: EventTarget<CoreEventMap>,
+    readonly infoHash: string,
   ) {
     this.onSegmentError = eventTarget.getEventDispatcher("onSegmentError");
     this.onSegmentAbort = eventTarget.getEventDispatcher("onSegmentAbort");
@@ -180,7 +182,7 @@ export class Request {
     requestData: StartRequestParameters,
     controls: {
       notReceivingBytesTimeoutMs?: number;
-      abort: (errorType: RequestError<RequestAbortErrorType>) => void;
+      onAbort: (errorType: RequestError<RequestAbortErrorType>) => void;
     },
     validate:
       | ((
@@ -264,7 +266,7 @@ export class Request {
         `${downloadSource} ${this.segment.externalId} validation failed for already-loaded bytes, clearing`,
       );
       this.clearLoadedBytes();
-      requestControls.abortOnError(new RequestError(validationErrorType));
+      requestControls.failWithError(new RequestError(validationErrorType));
       return;
     }
 
@@ -278,7 +280,7 @@ export class Request {
     requestData: StartRequestParameters,
     controls: {
       notReceivingBytesTimeoutMs?: number;
-      abort: (errorType: RequestError<RequestAbortErrorType>) => void;
+      onAbort: (errorType: RequestError<RequestAbortErrorType>) => void;
     },
   ): RequestControls {
     if (this._status === "succeed") {
@@ -301,8 +303,9 @@ export class Request {
     };
     this.manageBandwidthCalculatorsState("start");
 
-    const { notReceivingBytesTimeoutMs, abort } = controls;
-    this._abortRequestCallback = abort;
+    const { notReceivingBytesTimeoutMs } = controls;
+    this._onAbortCallback = controls.onAbort;
+    this.notReceivingBytesTimeoutMs = notReceivingBytesTimeoutMs;
 
     if (notReceivingBytesTimeoutMs !== undefined) {
       this.notReceivingBytesTimeout.start(notReceivingBytesTimeoutMs);
@@ -317,23 +320,25 @@ export class Request {
       downloadSource: requestData.downloadSource,
       peerId:
         requestData.downloadSource === "p2p" ? requestData.peerId : undefined,
+      infoHash: this.infoHash,
+      streamType: this.segment.stream.type,
     });
 
     return {
       firstBytesReceived: this.firstBytesReceived,
       addLoadedChunk: this.addLoadedChunk,
       completeOnSuccess: this.completeOnSuccess,
-      abortOnError: this.abortOnError,
+      failWithError: this.failWithError,
     };
   }
 
-  abortFromProcessQueue() {
+  cancel() {
     this.throwErrorIfNotLoadingStatus();
     this.setStatus("aborted");
     this.logger(
       `${this.currentAttempt?.downloadSource} ${this.segment.externalId} aborted`,
     );
-    this._abortRequestCallback?.(new RequestError("abort"));
+    this._onAbortCallback?.(new RequestError("abort"));
     this.onSegmentAbort({
       segment: mapSegmentWithStreamToSegment(this.segment),
       downloadSource: this.currentAttempt?.downloadSource,
@@ -341,23 +346,43 @@ export class Request {
         this.currentAttempt?.downloadSource === "p2p"
           ? this.currentAttempt.peerId
           : undefined,
+      infoHash: this.infoHash,
       streamType: this.segment.stream.type,
     });
-    this._abortRequestCallback = undefined;
+    this._onAbortCallback = undefined;
     this.manageBandwidthCalculatorsState("stop");
     this.notReceivingBytesTimeout.clear();
   }
 
   private abortOnTimeout = () => {
     this.throwErrorIfNotLoadingStatus();
-    if (!this.currentAttempt) return;
+    if (
+      !this.currentAttempt ||
+      !this.progress ||
+      this.notReceivingBytesTimeoutMs === undefined
+    ) {
+      return;
+    }
+
+    const now = performance.now();
+    const lastActive =
+      this.progress.lastLoadedChunkTimestamp ?? this.progress.startTimestamp;
+    const msSinceLastActive = now - lastActive;
+
+    if (msSinceLastActive < this.notReceivingBytesTimeoutMs) {
+      // False alarm! The stream is still downloading. Reschedule the timer.
+      this.notReceivingBytesTimeout.restart(
+        this.notReceivingBytesTimeoutMs - msSinceLastActive,
+      );
+      return;
+    }
 
     const error = new RequestError("bytes-receiving-timeout");
-    this._abortRequestCallback?.(error);
+    this._onAbortCallback?.(error);
     this.handleFailure(error);
   };
 
-  private abortOnError = (error: RequestError) => {
+  private failWithError = (error: RequestError) => {
     this.throwErrorIfNotLoadingStatus();
     if (!this.currentAttempt) return;
 
@@ -383,6 +408,7 @@ export class Request {
         this.currentAttempt.downloadSource === "p2p"
           ? this.currentAttempt.peerId
           : undefined,
+      infoHash: this.infoHash,
       streamType: this.segment.stream.type,
     });
     this.notReceivingBytesTimeout.clear();
@@ -400,12 +426,14 @@ export class Request {
     this._totalBytes = this._loadedBytes;
     this.onSegmentLoaded({
       segmentUrl: this.segment.url,
+      segment: mapSegmentWithStreamToSegment(this.segment),
       bytesLength: this.data.byteLength,
       downloadSource: this.currentAttempt.downloadSource,
       peerId:
         this.currentAttempt.downloadSource === "p2p"
           ? this.currentAttempt.peerId
           : undefined,
+      infoHash: this.infoHash,
       streamType: this.segment.stream.type,
     });
 
@@ -418,7 +446,6 @@ export class Request {
   private addLoadedChunk = (chunk: Uint8Array) => {
     this.throwErrorIfNotLoadingStatus();
     if (!this.currentAttempt || !this.progress) return;
-    this.notReceivingBytesTimeout.restart();
 
     const { byteLength } = chunk;
     const { all: allBC, http: httpBC } = this.bandwidthCalculators;
@@ -435,7 +462,6 @@ export class Request {
 
   private firstBytesReceived = () => {
     this.throwErrorIfNotLoadingStatus();
-    this.notReceivingBytesTimeout.restart();
   };
 
   private throwErrorIfNotLoadingStatus() {
@@ -504,9 +530,9 @@ export class Timeout {
   }
 
   restart(ms?: number) {
-    if (this.timeoutId) clearTimeout(this.timeoutId);
-    if (ms) this.ms = ms;
-    if (!this.ms) return;
+    this.clear();
+    if (ms !== undefined) this.ms = ms;
+    if (this.ms === undefined) return;
     this.timeoutId = window.setTimeout(this.action, this.ms);
   }
 

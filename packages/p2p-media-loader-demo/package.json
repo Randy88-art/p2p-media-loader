@@ -26,7 +26,7 @@
     "ecdn",
     "cdn"
   ],
-  "version": "2.3.0",
+  "version": "3.0.0",
   "type": "module",
   "files": [
     "lib",
@@ -43,11 +43,10 @@
     "copy-css": "cpy \"src/**/*.css\" \"./lib/\" --parents",
     "lint": "eslint src --report-unused-disable-directives --max-warnings 0 --flag unstable_native_nodejs_ts_config",
     "type-check": "npx tsc --noEmit",
-    "clean": "rimraf lib dist build p2p-media-loader-demo-*.tgz",
-    "clean-with-modules": "rimraf node_modules && pnpm clean"
+    "clean:build": "rimraf lib dist build p2p-media-loader-demo-*.tgz"
   },
   "dependencies": {
-    "@vidstack/react": "^1.12.13",
+    "@vidstack/react": "^1.15.4",
     "d3": "^7.9.0",
     "dplayer": "^1.27.1",
     "hls.js": "^1.6.16",
@@ -57,18 +56,18 @@
     "p2p-media-loader-hlsjs": "workspace:*",
     "p2p-media-loader-shaka": "workspace:*",
     "plyr": "^3.8.4",
-    "shaka-player": "^5.1.3"
+    "shaka-player": "^5.1.7"
   },
   "devDependencies": {
     "@types/d3": "^7.4.3",
     "@types/dplayer": "^1.25.5",
-    "@types/react": "^19.2.14",
+    "@types/react": "^19.2.16",
     "@types/react-dom": "^19.2.3",
     "cpy-cli": "^7.0.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
-    "react": "^19.2.6",
-    "react-dom": "^19.2.6"
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
   },
   "peerDependencies": {
     "react": ">=16",
