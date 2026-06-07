@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   getRequiredBytesForInt,
+  serializeInt,
+  deserializeInt,
   serializeUniqueSimilarIntArray,
   deserializeUniqueSimilarIntArray,
   serializeString,
@@ -43,6 +45,35 @@ describe("binary-serialization", () => {
     });
   });
 
+  describe("serializeInt and deserializeInt", () => {
+    it("should correctly serialize and deserialize a positive integer", () => {
+      const original = 123456;
+      const serialized = serializeInt(original);
+      const deserialized = deserializeInt(serialized);
+      expect(deserialized.number).toBe(original);
+      expect(deserialized.byteLength).toBe(serialized.length);
+    });
+
+    it("should correctly serialize and deserialize a negative integer", () => {
+      const original = -987654;
+      const serialized = serializeInt(original);
+      const deserialized = deserializeInt(serialized);
+      expect(deserialized.number).toBe(original);
+      expect(deserialized.byteLength).toBe(serialized.length);
+    });
+
+    it("should throw an error when deserializing a truncated integer buffer", () => {
+      const original = 123456;
+      const serialized = serializeInt(original);
+      const truncated = serialized.subarray(0, serialized.length - 1);
+      expect(() => deserializeInt(truncated)).toThrow("Buffer is too short");
+    });
+
+    it("should throw an error when deserializing an empty buffer", () => {
+      expect(() => deserializeInt(new Uint8Array(0))).toThrow("Buffer is too short");
+    });
+  });
+
   describe("serializeUniqueSimilarIntArray and deserializeUniqueSimilarIntArray", () => {
     // Tests for serializeUniqueSimilarIntArray
     it("should correctly serialize and deserialize a small array of unique integers", async () => {
@@ -79,6 +110,31 @@ describe("binary-serialization", () => {
       const serialized = serializeUniqueSimilarIntArray(original);
       const deserialized = deserializeUniqueSimilarIntArray(serialized);
       expect(deserialized.numbers).toEqual(original);
+    });
+
+    it("should throw an error when deserializing a truncated buffer (missing diff bytes)", () => {
+      const original = [1, 5, 10, 256, 258, 512];
+      const serialized = serializeUniqueSimilarIntArray(original);
+      const truncated = serialized.subarray(0, serialized.length - 1);
+      expect(() => deserializeUniqueSimilarIntArray(truncated)).toThrow(
+        "Malformed similar int array: buffer too short",
+      );
+    });
+
+    it("should throw an error when deserializing a truncated buffer (missing serialization metadata)", () => {
+      const original = [1, 5, 10, 256, 258, 512];
+      const serialized = serializeUniqueSimilarIntArray(original);
+      const truncated = serialized.subarray(0, serialized.length - 2);
+      expect(() => deserializeUniqueSimilarIntArray(truncated)).toThrow(
+        "Buffer is too short",
+      );
+    });
+
+    it("should throw an error when deserializing a truncated buffer (missing metadata bytes)", () => {
+      const original = [1, 5, 10, 256, 258, 512];
+      const serialized = serializeUniqueSimilarIntArray(original);
+      const truncated = serialized.subarray(0, 5);
+      expect(() => deserializeUniqueSimilarIntArray(truncated)).toThrow();
     });
   });
 

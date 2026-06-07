@@ -69,6 +69,9 @@ export function deserializeInt(bytes: Uint8Array) {
   const numberBytesLength = metadata & 0b1111;
   const start = 1;
   const end = start + numberBytesLength;
+  if (bytes.length < end) {
+    throw new Error("Buffer is too short");
+  }
   return {
     number: bytesToInt(bytes.subarray(start, end)),
     byteLength: numberBytesLength + 1,
@@ -120,6 +123,9 @@ export function deserializeUniqueSimilarIntArray(bytes: Uint8Array) {
     const actualLength = arrayLength === 0 ? 256 : arrayLength;
     const commonPart = commonPartWithLength - arrayLength;
 
+    if (offset + actualLength > bytes.length) {
+      throw new Error("Malformed similar int array: buffer too short");
+    }
     for (let j = 0; j < actualLength; j++) {
       const diffPart = bytes[offset];
       originalIntArr.push(commonPart + diffPart);
