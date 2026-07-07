@@ -47,13 +47,13 @@ export type StreamWithSegments<TStream extends Stream = Stream> = TStream & {
 
 /** Represents a media stream with various defining characteristics. */
 export type Stream = {
-  /** Runtime identifier of the stream from an engine. */
+  /** Runtime identifier of the stream from an engine. May differ from peer to peer. */
   readonly runtimeId: string;
 
   /** Stream type. */
   readonly type: StreamType;
 
-  /** Stream index in the manifest. */
+  /** Stream unique identifier. The same for all peers. */
   readonly index: string;
 };
 
