@@ -6,7 +6,12 @@ import {
   Stream,
   StreamWithReadonlySegments,
 } from "./types.js";
-import { Core, Segment, StreamType } from "p2p-media-loader-core";
+import {
+  Core,
+  Segment,
+  StreamProperties,
+  StreamType,
+} from "p2p-media-loader-core";
 
 // The minimum time interval (in seconds) between segments to assign unique IDs.
 // If two segments in the same playlist start within a time frame shorter than this interval,
@@ -23,11 +28,15 @@ export class SegmentManager {
     this.streamInfo = streamInfo;
   }
 
-  setStream(shakaStream: HookedStream, type: StreamType, index: string) {
+  setStream(
+    shakaStream: HookedStream,
+    type: StreamType,
+    properties: StreamProperties,
+  ) {
     this.core.addStreamIfNoneExists({
       runtimeId: shakaStream.id.toString(),
       type,
-      index,
+      properties,
       shakaStream,
     });
     if (shakaStream.segmentIndex) this.updateStreamSegments(shakaStream);

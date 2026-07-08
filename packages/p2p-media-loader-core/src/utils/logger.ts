@@ -2,7 +2,7 @@ import { SegmentWithStream, Stream } from "../types.js";
 import { SegmentPlaybackStatuses } from "./stream.js";
 
 export function getStreamString(stream: Stream) {
-  return `${stream.type}-${stream.index}`;
+  return `${stream.type}-${stream.identityHash}`;
 }
 
 export function getSegmentString(segment: SegmentWithStream) {

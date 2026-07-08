@@ -628,3 +628,44 @@ The global namespaces are `window.p2pml.hlsjs` and `window.p2pml.shaka`.
   });
 </script>
 ```
+
+## Predicting swarm infohashes on a server
+
+Each stream (media quality) is downloaded through its own P2P swarm, identified on trackers by an **infohash**. The infohash is the hash of the **stream swarm ID** — a string derived from the swarm ID, the stream type, and the stream's identity hash (a stable hash of its manifest properties such as bitrate, codecs, and resolution).
+
+A server can compute the exact infohashes clients will announce — for example, to allowlist them on a private tracker. The Node-safe helpers are exported from the `p2p-media-loader-core/server` subpath (Node.js 16+):
+
+```typescript
+import {
+  computeStreamSwarmId,
+  computeInfoHash,
+} from "p2p-media-loader-core/server";
+
+// With the default client configuration:
+const infoHash = computeInfoHash(
+  computeStreamSwarmId({
+    swarmId, // the configured swarmId or the manifest URL without query parameters
+    streamType: "main",
+    properties: { bitrate, codecs, width, height },
+  }),
+);
+
+// The tracker allowlist entry (hex of the announced 20-byte ASCII string):
+const allowlistEntry = Buffer.from(infoHash, "utf8").toString("hex");
+```
+
+For full control, configure a custom `streamSwarmIdBuilder` on the client and apply `computeInfoHash` to the same string on the server. This way the infohash depends only on values the server authors itself:
+
+```typescript
+// Client
+const config = {
+  swarmId: videoUuid,
+  streamSwarmIdBuilder: ({ swarmId, streamType, properties }) =>
+    `my-app-${swarmId}-${streamType}-${properties.height ?? 0}`,
+};
+
+// Server (per quality, at transcode time)
+const infoHash = computeInfoHash(`my-app-${videoUuid}-main-${height}`);
+```
+
+The stream swarm ID must be deterministic and identical across all peers of a swarm, and distinct streams must produce distinct IDs. It cannot be changed at runtime. Clients can also observe each registered stream's computed identity through the `onStreamAdded` core event.

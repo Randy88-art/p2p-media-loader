@@ -12,11 +12,18 @@ import {
   CommonCoreConfig,
   StreamConfig,
   DefinedCoreConfig,
+  StreamRegistration,
   StreamType,
   DynamicStreamConfig,
 } from "./types.js";
 import { BandwidthCalculators, StreamDetails } from "./internal-types.js";
 import * as StreamUtils from "./utils/stream.js";
+import {
+  buildStreamSwarmId,
+  computeInfoHash,
+  computeStreamIdentityHash,
+  PEER_PROTOCOL_VERSION,
+} from "./stream-identity.js";
 import { BandwidthCalculator } from "./bandwidth-calculator.js";
 import { SegmentMemoryStorage } from "./segment-storage/segment-memory-storage.js";
 import { EventTarget } from "./utils/event-target.js";
@@ -69,6 +76,7 @@ export class Core<TStream extends Stream = Stream> {
     validateHTTPSegment: undefined,
     httpRequestSetup: undefined,
     swarmId: undefined,
+    streamSwarmIdBuilder: undefined,
     p2pMaxPeers: 50,
     p2pChurnMaxPeersMultiplier: 1.5,
     p2pChurnCleanupIntervalMs: 30000,
@@ -306,14 +314,81 @@ export class Core<TStream extends Stream = Stream> {
   /**
    * Ensures a stream exists in the map; adds it if it does not.
    *
+   * Computes the stream's identity (`swarmId`, `identityHash`, `streamSwarmId`,
+   * `infoHash`) exactly once at registration and freezes it on the stream.
+   * Requires the swarm ID to be resolvable: either a `swarmId` is configured
+   * or `setManifestResponseUrl()` has been called.
+   *
    * @param stream - The stream to potentially add to the map.
    */
-  addStreamIfNoneExists(stream: TStream): void {
+  addStreamIfNoneExists(stream: StreamRegistration<TStream>): void {
     if (this.streams.has(stream.runtimeId)) return;
 
-    this.streams.set(stream.runtimeId, {
+    const config =
+      stream.type === "main"
+        ? this.mainStreamConfig
+        : this.secondaryStreamConfig;
+
+    const swarmId = config.swarmId ?? this.manifestResponseUrl;
+    if (swarmId === undefined) {
+      throw new Error(
+        "Failed to register stream: no swarmId is configured and the manifest response URL is not set. Call setManifestResponseUrl() before adding streams.",
+      );
+    }
+
+    const properties = Object.freeze({ ...stream.properties });
+    const identityHash = computeStreamIdentityHash(properties);
+
+    let streamSwarmId = buildStreamSwarmId(swarmId, stream.type, identityHash);
+    if (config.streamSwarmIdBuilder) {
+      const customStreamSwarmId = config.streamSwarmIdBuilder({
+        swarmId,
+        runtimeId: stream.runtimeId,
+        streamType: stream.type,
+        properties,
+        identityHash,
+        peerProtocolVersion: PEER_PROTOCOL_VERSION,
+      });
+
+      if (customStreamSwarmId !== undefined) {
+        if (
+          typeof customStreamSwarmId !== "string" ||
+          customStreamSwarmId === ""
+        ) {
+          throw new Error(
+            "streamSwarmIdBuilder must return a non-empty string or undefined",
+          );
+        }
+        streamSwarmId = customStreamSwarmId;
+      }
+    }
+
+    for (const registered of this.streams.values()) {
+      if (
+        registered.streamSwarmId === streamSwarmId &&
+        registered.identityHash !== identityHash
+      ) {
+        throw new Error(
+          `streamSwarmIdBuilder produced the same stream swarm ID ("${streamSwarmId}") for streams with different identities. Peers of these streams would exchange segments of the wrong stream.`,
+        );
+      }
+    }
+
+    const registeredStream = {
       ...stream,
+      properties,
+      swarmId,
+      identityHash,
+      streamSwarmId,
+      infoHash: computeInfoHash(streamSwarmId),
       segments: new Map<string, SegmentWithStream<TStream>>(),
+      // TypeScript cannot prove that StreamRegistration<TStream> plus the
+      // computed identity fields reconstructs TStream for an arbitrary subtype.
+    } as unknown as StreamWithSegments<TStream>;
+
+    this.streams.set(stream.runtimeId, registeredStream);
+    this.eventTarget.dispatchEvent("onStreamAdded", {
+      stream: registeredStream,
     });
   }
 
@@ -496,12 +571,12 @@ export class Core<TStream extends Stream = Stream> {
         return;
       }
 
-      segmentStorage.setSegmentChangeCallback((streamId: string) => {
+      segmentStorage.setSegmentChangeCallback((streamSwarmId: string) => {
         (
           this.eventTarget as unknown as EventTarget<
             CoreEventMap & Record<`onStorageUpdated-${string}`, () => void>
           >
-        ).dispatchEvent(`onStorageUpdated-${streamId}`);
+        ).dispatchEvent(`onStorageUpdated-${streamSwarmId}`);
       });
 
       this.segmentStorage = segmentStorage;
@@ -535,17 +610,37 @@ export class Core<TStream extends Stream = Stream> {
     mainStream?: Partial<StreamConfig>,
     secondaryStream?: Partial<StreamConfig>,
   ) {
-    overrideConfig(this.commonCoreConfig, dynamicConfig);
-    overrideConfig(this.mainStreamConfig, dynamicConfig);
-    overrideConfig(this.secondaryStreamConfig, dynamicConfig);
+    // Stream identity is derived from these properties once, at stream
+    // registration; changing them at runtime would silently desynchronize
+    // the announced swarms from the registered streams.
+    const sanitizedDynamicConfig = Core.stripStaticOnlyProps(dynamicConfig);
+    const sanitizedMainStream =
+      mainStream && Core.stripStaticOnlyProps(mainStream);
+    const sanitizedSecondaryStream =
+      secondaryStream && Core.stripStaticOnlyProps(secondaryStream);
 
-    if (mainStream) {
-      overrideConfig(this.mainStreamConfig, mainStream);
+    overrideConfig(this.commonCoreConfig, sanitizedDynamicConfig);
+    overrideConfig(this.mainStreamConfig, sanitizedDynamicConfig);
+    overrideConfig(this.secondaryStreamConfig, sanitizedDynamicConfig);
+
+    if (sanitizedMainStream) {
+      overrideConfig(this.mainStreamConfig, sanitizedMainStream);
     }
 
-    if (secondaryStream) {
-      overrideConfig(this.secondaryStreamConfig, secondaryStream);
+    if (sanitizedSecondaryStream) {
+      overrideConfig(this.secondaryStreamConfig, sanitizedSecondaryStream);
     }
+  }
+
+  private static stripStaticOnlyProps<T extends object>(config: T): T {
+    if (!("swarmId" in config) && !("streamSwarmIdBuilder" in config)) {
+      return config;
+    }
+
+    const sanitized = { ...config } as Record<string, unknown>;
+    delete sanitized.swarmId;
+    delete sanitized.streamSwarmIdBuilder;
+    return sanitized as T;
   }
 
   private destroyStreamLoader(streamType: StreamType) {
@@ -569,10 +664,6 @@ export class Core<TStream extends Stream = Stream> {
   }
 
   private createNewHybridLoader(segment: SegmentWithStream) {
-    if (!this.manifestResponseUrl) {
-      throw new Error("Manifest response url is not defined");
-    }
-
     if (!this.segmentStorage) {
       throw new Error("Segment storage is not initialized");
     }
@@ -583,7 +674,6 @@ export class Core<TStream extends Stream = Stream> {
         : this.secondaryStreamConfig;
 
     return new HybridLoader(
-      this.manifestResponseUrl,
       segment,
       this.streamDetails,
       streamConfig,

@@ -11,7 +11,6 @@ import { WebTorrentManager } from "../webtorrent/webtorrent-manager/index.js";
 import { WebTorrentSocketPool } from "../webtorrent/webtorrent-socket-pool/index.js";
 import * as StreamUtils from "../utils/stream.js";
 import * as Utils from "../utils/utils.js";
-import * as PeerUtil from "../utils/peer.js";
 import { EventTarget } from "../utils/event-target.js";
 import { SegmentStorage } from "../segment-storage/index.js";
 import debug from "debug";
@@ -24,14 +23,10 @@ const MIN_CHURN_CLEANUP_INTERVAL_MS = 1000;
 export class P2PLoader {
   readonly #webtorrentManager: WebTorrentManager;
   readonly #peersMap = new Map<string, Peer>();
-  readonly #swarmId: string;
-  readonly #streamSwarmId: string;
   #isAnnounceMicrotaskCreated = false;
   readonly #webtorrentManagerLogger = debug("p2pml-core:webtorrent-manager");
   readonly #churnLogger = debug("p2pml-core:churn-cleanup");
 
-  readonly #infoHash: string;
-  #streamManifestUrl: string;
   readonly #stream: StreamWithSegments;
   readonly #requests: RequestsContainer;
   readonly #segmentStorage: SegmentStorage;
@@ -50,7 +45,6 @@ export class P2PLoader {
   readonly #onTrackerError: CoreEventMap["onTrackerError"];
 
   constructor(
-    streamManifestUrl: string,
     stream: StreamWithSegments,
     requests: RequestsContainer,
     segmentStorage: SegmentStorage,
@@ -60,7 +54,6 @@ export class P2PLoader {
     peerId: string,
     onSegmentAnnouncement: () => void,
   ) {
-    this.#streamManifestUrl = streamManifestUrl;
     this.#stream = stream;
     this.#requests = requests;
     this.#segmentStorage = segmentStorage;
@@ -78,17 +71,8 @@ export class P2PLoader {
     this.#onTrackerWarning = eventTarget.getEventDispatcher("onTrackerWarning");
     this.#onTrackerError = eventTarget.getEventDispatcher("onTrackerError");
 
-    this.#swarmId = this.#config.swarmId ?? this.#streamManifestUrl;
-    this.#streamSwarmId = StreamUtils.getStreamSwarmId(
-      this.#swarmId,
-      this.#stream,
-    );
-
-    const streamHash = PeerUtil.getStreamHash(this.#streamSwarmId);
-    this.#infoHash = streamHash;
-
     this.#webtorrentManager = new WebTorrentManager({
-      infoHash: streamHash,
+      infoHash: this.#stream.infoHash,
       peerId,
       trackerUrls: this.#config.announceTrackers,
       rtcConfig: () => this.#config.rtcConfig,
@@ -118,7 +102,7 @@ export class P2PLoader {
       );
       this.#onPeerConnectError({
         peerId: event.peerId,
-        infoHash: this.#infoHash,
+        infoHash: this.#stream.infoHash,
         streamType: this.#stream.type,
         trackerUrl: event.trackerUrl,
         error: event.error,
@@ -132,7 +116,7 @@ export class P2PLoader {
       );
       this.#onTrackerWarning({
         trackerUrl: event.trackerUrl,
-        infoHash: this.#infoHash,
+        infoHash: this.#stream.infoHash,
         streamType: this.#stream.type,
         warning: event.warning,
       });
@@ -145,14 +129,14 @@ export class P2PLoader {
       );
       this.#onTrackerError({
         trackerUrl: event.trackerUrl,
-        infoHash: this.#infoHash,
+        infoHash: this.#stream.infoHash,
         streamType: this.#stream.type,
         error: event.error,
       });
     });
 
     this.#eventTarget.addEventListener(
-      `onStorageUpdated-${this.#streamSwarmId}`,
+      `onStorageUpdated-${this.#stream.streamSwarmId}`,
       this.broadcastAnnouncement,
     );
 
@@ -264,8 +248,8 @@ export class P2PLoader {
 
   #getSegmentsAnnouncement() {
     const loaded: number[] = this.#segmentStorage.getStoredSegmentIds(
-      this.#swarmId,
-      this.#streamSwarmId,
+      this.#stream.swarmId,
+      this.#stream.streamSwarmId,
     );
     const httpLoading: number[] = [];
 
@@ -311,7 +295,7 @@ export class P2PLoader {
         onWarning: (warning) => {
           this.#onPeerWarning({
             peerId: peer.id,
-            infoHash: this.#infoHash,
+            infoHash: this.#stream.infoHash,
             streamType: this.#stream.type,
             warning,
           });
@@ -324,7 +308,7 @@ export class P2PLoader {
         p2pErrorRetries: this.#config.p2pErrorRetries,
         validateP2PSegment: this.#config.validateP2PSegment,
         streamType: this.#stream.type,
-        infoHash: this.#infoHash,
+        infoHash: this.#stream.infoHash,
       },
       this.#eventTarget,
     );
@@ -332,7 +316,7 @@ export class P2PLoader {
 
     this.#onPeerConnect({
       peerId: event.peerId,
-      infoHash: this.#infoHash,
+      infoHash: this.#stream.infoHash,
       streamType: this.#stream.type,
     });
 
@@ -366,7 +350,7 @@ export class P2PLoader {
     if (event.error) {
       this.#onPeerError({
         peerId: event.peerId,
-        infoHash: this.#infoHash,
+        infoHash: this.#stream.infoHash,
         streamType: this.#stream.type,
         error: event.error,
       });
@@ -374,7 +358,7 @@ export class P2PLoader {
 
     this.#onPeerClose({
       peerId: peer.id,
-      infoHash: this.#infoHash,
+      infoHash: this.#stream.infoHash,
       streamType: this.#stream.type,
     });
   };
@@ -426,8 +410,8 @@ export class P2PLoader {
     let segmentData: ArrayBuffer | undefined;
     try {
       segmentData = await this.#segmentStorage.getSegmentData(
-        this.#swarmId,
-        this.#streamSwarmId,
+        this.#stream.swarmId,
+        this.#stream.streamSwarmId,
         segment.externalId,
       );
     } catch (error) {
@@ -458,7 +442,7 @@ export class P2PLoader {
     this.#churnCleanupTimeoutId = undefined;
 
     this.#eventTarget.removeEventListener(
-      `onStorageUpdated-${this.#streamSwarmId}`,
+      `onStorageUpdated-${this.#stream.streamSwarmId}`,
       this.broadcastAnnouncement,
     );
 

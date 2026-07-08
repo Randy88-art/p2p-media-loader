@@ -3,9 +3,12 @@ import type {
   ManifestLoadedData,
   LevelUpdatedData,
   AudioTrackLoadedData,
-  LevelParsed,
 } from "hls.js";
-import { Core, Segment, generateStreamShortId } from "p2p-media-loader-core";
+import { Core, Segment } from "p2p-media-loader-core";
+import {
+  getAudioStreamProperties,
+  getVideoStreamProperties,
+} from "./stream-properties.js";
 
 export class SegmentManager {
   core: Core;
@@ -19,44 +22,20 @@ export class SegmentManager {
     // in the case of audio only stream it is stored in levels
 
     for (const level of levels) {
-      const { url, bitrate, maxBitrate, videoCodec, width, height } =
-        level as LevelParsed & { maxBitrate?: number };
-      // maxBitrate tracks the peak BANDWIDTH tag, whereas bitrate tracks AVERAGE-BANDWIDTH.
-      // We prioritize maxBitrate to universally match Shaka's variant.bandwidth parsing.
-      const b = maxBitrate ?? bitrate;
-      const isMissingMetadata = b === 0;
-      const frameRate = level.attrs["FRAME-RATE"];
-      const videoRange = level.attrs["VIDEO-RANGE"];
-
-      const index = generateStreamShortId({
-        bitrate: b,
-        codecs: isMissingMetadata ? undefined : videoCodec,
-        width: isMissingMetadata ? undefined : width,
-        height: isMissingMetadata ? undefined : height,
-        frameRate: isMissingMetadata ? undefined : frameRate,
-        videoRange: isMissingMetadata ? undefined : videoRange,
-      });
+      const { url } = level;
       this.core.addStreamIfNoneExists({
         runtimeId: Array.isArray(url) ? (url as string[])[0] : url,
         type: "main",
-        index,
+        properties: getVideoStreamProperties(level),
       });
     }
 
     for (const track of audioTracks) {
-      // Object properties vary across hls.js versions so we cast to any:
-      const { url, audioCodec, lang, channels, name } = track;
-      const index = generateStreamShortId({
-        bitrate: 0, // Match Shaka behavior for audio stream without variant
-        codecs: audioCodec,
-        language: lang,
-        channels,
-        name,
-      });
+      const { url } = track;
       this.core.addStreamIfNoneExists({
         runtimeId: Array.isArray(url) ? (url as string[])[0] : url,
         type: "secondary",
-        index,
+        properties: getAudioStreamProperties(track),
       });
     }
   }

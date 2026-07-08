@@ -45,6 +45,23 @@ export type StreamWithSegments<TStream extends Stream = Stream> = TStream & {
   readonly segments: Map<string, SegmentWithStream<TStream>>;
 };
 
+/**
+ * Raw stream properties extracted from the manifest's variant or rendition
+ * metadata. They define the stream's identity: streams with equal normalized
+ * properties are treated as the same stream by all peers.
+ */
+export type StreamProperties = {
+  bitrate?: number | null;
+  codecs?: string | null;
+  width?: number | null;
+  height?: number | null;
+  language?: string | null;
+  channels?: string | number | null;
+  name?: string | null;
+  frameRate?: number | string | null;
+  videoRange?: string | null;
+};
+
 /** Represents a media stream with various defining characteristics. */
 export type Stream = {
   /** Runtime identifier of the stream from an engine. May differ from peer to peer. */
@@ -53,9 +70,45 @@ export type Stream = {
   /** Stream type. */
   readonly type: StreamType;
 
-  /** Stream unique identifier. The same for all peers. */
-  readonly index: string;
+  /** Raw stream properties from the manifest, provided by the player integration. */
+  readonly properties: Readonly<StreamProperties>;
+
+  /**
+   * The swarm ID the stream was registered with: the configured `swarmId`
+   * or, if not set, the manifest response URL. Resolved once at registration.
+   */
+  readonly swarmId: string;
+
+  /**
+   * Stream identity hash derived from the normalized stream properties.
+   * The same for all peers regardless of the player in use.
+   */
+  readonly identityHash: string;
+
+  /**
+   * The pre-hash string that defines which P2P swarm the stream belongs to.
+   * By default `${peerProtocolVersion}-${swarmId}-${type}-${identityHash}`;
+   * a custom `streamSwarmIdBuilder` may override it. Computed once at registration.
+   */
+  readonly streamSwarmId: string;
+
+  /**
+   * The infohash announced to trackers for the stream's swarm:
+   * a 20-character ASCII string derived from the stream swarm ID.
+   * Computed once at registration.
+   */
+  readonly infoHash: string;
 };
+
+/**
+ * The stream data a player integration passes to `Core.addStreamIfNoneExists`.
+ * The identity fields (`swarmId`, `identityHash`, `streamSwarmId`, `infoHash`)
+ * are computed by the Core at registration.
+ */
+export type StreamRegistration<TStream extends Stream = Stream> = Omit<
+  TStream,
+  "swarmId" | "identityHash" | "streamSwarmId" | "infoHash"
+>;
 
 /** Represents a defined Core configuration with specific settings for the main and secondary streams. */
 export type DefinedCoreConfig = CommonCoreConfig & {
@@ -97,6 +150,9 @@ export type DynamicStreamProperties =
 /**
  * Represents a dynamically modifiable configuration, allowing updates to selected CoreConfig properties at runtime.
  *
+ * Note that `swarmId` and `streamSwarmIdBuilder` cannot be changed at runtime:
+ * stream identity is derived from them once, when a stream is registered.
+ *
  * @example
  * ```typescript
  * const dynamicConfig: DynamicCoreConfig = {
@@ -104,11 +160,11 @@ export type DynamicStreamProperties =
  *     cachedSegmentsCount: 200,
  *   },
  *   mainStream: {
- *     swarmId: "custom swarm ID for video stream",
+ *     highDemandTimeWindow: 20,
  *     p2pDownloadTimeWindow: 6000,
  *   },
  *   secondaryStream: {
- *     swarmId: "custom swarm ID for audio stream",
+ *     highDemandTimeWindow: 10,
  *     p2pDownloadTimeWindow: 3000,
  *   }
  * };
@@ -406,12 +462,54 @@ export type StreamConfig = {
   /**
    * An optional unique identifier for the swarm, used to isolate peer pools by media stream.
    * If left undefined, the manifest URL will be used as the swarm ID.
+   *
+   * This property cannot be changed at runtime: stream identity is derived
+   * from it once, when a stream is registered.
+   *
    * @default
    * ```typescript
    * swarmId: undefined
    * ```
    */
   swarmId?: string;
+
+  /**
+   * An optional function that builds a custom stream swarm ID.
+   * The stream swarm ID is hashed into the infohash announced to trackers
+   * (`infoHash = computeInfoHash(streamSwarmId)`), so it fully defines which
+   * swarm the stream's peers join.
+   *
+   * Use it to make infohashes predictable on a server: build the ID from
+   * values the server knows (e.g. swarm ID, stream type, resolution), then
+   * compute the same infohash server-side with `computeInfoHash` from
+   * `p2p-media-loader-core/server` — for example, to allowlist the hashes
+   * on a private tracker.
+   *
+   * The function must be deterministic and identical across all peers of the
+   * swarm: peers whose streams resolve to the same infohash exchange segments
+   * with each other, so distinct streams must produce distinct IDs.
+   *
+   * Called once per stream at registration. This property cannot be changed
+   * at runtime.
+   *
+   * @param context - The stream identity data the ID may be built from.
+   * @returns The stream swarm ID, or `undefined` to use the default
+   * derivation (`` `${peerProtocolVersion}-${swarmId}-${streamType}-${identityHash}` ``).
+   *
+   * @default
+   * ```typescript
+   * streamSwarmIdBuilder: undefined
+   * ```
+   *
+   * @example
+   * ```typescript
+   * streamSwarmIdBuilder: ({ swarmId, streamType, properties }) =>
+   *   `my-app-${swarmId}-${streamType}-${properties.height ?? 0}`,
+   * ```
+   */
+  streamSwarmIdBuilder?: (
+    context: StreamSwarmIdBuilderContext,
+  ) => string | undefined;
 
   /**
    * An optional function to validate a P2P segment before fully integrating it into the playback buffer.
@@ -556,6 +654,27 @@ export type StreamConfig = {
    * ```
    */
   webRtcConnectionTimeoutMs: number;
+};
+
+/** The stream identity data passed to a custom `streamSwarmIdBuilder`. */
+export type StreamSwarmIdBuilderContext = {
+  /** The swarm ID of the stream: the configured `swarmId` or the manifest response URL. */
+  swarmId: string;
+
+  /** Runtime identifier of the stream from the engine. May differ from peer to peer — avoid using it in the ID. */
+  runtimeId: string;
+
+  /** Stream type. */
+  streamType: StreamType;
+
+  /** Raw stream properties from the manifest. */
+  properties: Readonly<StreamProperties>;
+
+  /** Stream identity hash derived from the normalized stream properties. The same for all peers. */
+  identityHash: string;
+
+  /** Version of the peer swarm protocol used in the default stream swarm ID derivation. */
+  peerProtocolVersion: string;
 };
 
 /**
@@ -790,11 +909,26 @@ export type PeerConnectErrorDetails = {
   error: PeerConnectError;
 };
 
+/** Represents the details about a registered stream. */
+export type StreamAddedDetails = {
+  /** The registered stream with its computed identity. */
+  stream: Stream;
+};
+
 /**
  * The CoreEventMap defines a comprehensive suite of event handlers crucial for monitoring and controlling the lifecycle
  * of segment downloading and uploading processes.
  */
 export type CoreEventMap = {
+  /**
+   * Invoked when a stream is registered in the Core, once per stream.
+   * The stream carries its computed identity, including the infohash
+   * announced to trackers for its swarm.
+   *
+   * @param params - Contains the registered stream.
+   */
+  onStreamAdded: (params: StreamAddedDetails) => void;
+
   /**
    * Invoked when a segment is fully downloaded and available for use.
    *

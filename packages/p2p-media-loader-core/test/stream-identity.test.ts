@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
-  generateStreamShortId,
-  getStreamSwarmId,
-} from "../src/utils/stream.js";
-import { getStreamHash } from "../src/utils/peer.js";
-import { Stream, StreamType } from "../src/types.js";
+  computeStreamIdentityHash,
+  buildStreamSwarmId,
+  computeInfoHash,
+  computeStreamSwarmId as computeStreamSwarmIdFromProperties,
+  PEER_PROTOCOL_VERSION,
+} from "../src/stream-identity.js";
+import { StreamProperties, StreamType } from "../src/types.js";
 
 // Golden vectors freezing the v2 wire protocol. These literals were generated
 // by executing the implementation itself and MUST NOT change: any difference
@@ -14,18 +16,11 @@ import { Stream, StreamType } from "../src/types.js";
 
 const SWARM_ID = "https://example.com/hls/master.m3u8";
 
-const computeIdentityHash = (
-  props: Parameters<typeof generateStreamShortId>[0],
-) => generateStreamShortId(props);
+const computeIdentityHash = (props: StreamProperties) =>
+  computeStreamIdentityHash(props);
 
-const computeSwarmKey = (streamType: StreamType, identityHash: string) => {
-  const stream: Stream = {
-    runtimeId: "runtime-id",
-    type: streamType,
-    index: identityHash,
-  };
-  return getStreamSwarmId(SWARM_ID, stream);
-};
+const computeStreamSwarmId = (streamType: StreamType, identityHash: string) =>
+  buildStreamSwarmId(SWARM_ID, streamType, identityHash);
 
 const GOLDEN_VECTORS = [
   {
@@ -40,7 +35,7 @@ const GOLDEN_VECTORS = [
     },
     streamType: "main" as StreamType,
     identityHash: "mskAojmI+F5YyLLvSP3sdMO5nII=",
-    swarmKey:
+    streamSwarmId:
       "v2-https://example.com/hls/master.m3u8-main-mskAojmI+F5YyLLvSP3sdMO5nII=",
     infoHash: "aEnMPupzZeID9k+gkk5Y",
   },
@@ -49,7 +44,7 @@ const GOLDEN_VECTORS = [
     props: { bitrate: 800000, codecs: "avc1.66.30", width: 640, height: 360 },
     streamType: "main" as StreamType,
     identityHash: "NCMJrr57E8a6HDMfQTyx2FBIVq8=",
-    swarmKey:
+    streamSwarmId:
       "v2-https://example.com/hls/master.m3u8-main-NCMJrr57E8a6HDMfQTyx2FBIVq8=",
     infoHash: "KyXU7oYavEYFE/jxdEBu",
   },
@@ -64,7 +59,7 @@ const GOLDEN_VECTORS = [
     },
     streamType: "secondary" as StreamType,
     identityHash: "bdjQ1B4N2yrcTDHyU5j7iDGV9sY=",
-    swarmKey:
+    streamSwarmId:
       "v2-https://example.com/hls/master.m3u8-secondary-bdjQ1B4N2yrcTDHyU5j7iDGV9sY=",
     infoHash: "Brw7M7eJYTdtKRTVLdah",
   },
@@ -73,7 +68,7 @@ const GOLDEN_VECTORS = [
     props: { bitrate: 0 },
     streamType: "main" as StreamType,
     identityHash: "UYnLxGhQilEV4D0HbCx+kRv0ZF0=",
-    swarmKey:
+    streamSwarmId:
       "v2-https://example.com/hls/master.m3u8-main-UYnLxGhQilEV4D0HbCx+kRv0ZF0=",
     infoHash: "P78ZUY66tgmtYL6JoePW",
   },
@@ -89,7 +84,7 @@ const GOLDEN_VECTORS = [
     },
     streamType: "main" as StreamType,
     identityHash: "xRZQlAX26agaIEVBIZ0SppKubi0=",
-    swarmKey:
+    streamSwarmId:
       "v2-https://example.com/hls/master.m3u8-main-xRZQlAX26agaIEVBIZ0SppKubi0=",
     infoHash: "HC9QZIUjD8lNeTcsspkz",
   },
@@ -101,19 +96,38 @@ describe("stream identity golden vectors (v2 wire protocol)", () => {
       const identityHash = computeIdentityHash(vector.props);
       expect(identityHash).toBe(vector.identityHash);
 
-      const swarmKey = computeSwarmKey(vector.streamType, identityHash);
-      expect(swarmKey).toBe(vector.swarmKey);
+      const streamSwarmId = computeStreamSwarmId(
+        vector.streamType,
+        identityHash,
+      );
+      expect(streamSwarmId).toBe(vector.streamSwarmId);
 
-      expect(getStreamHash(swarmKey)).toBe(vector.infoHash);
+      expect(computeInfoHash(streamSwarmId)).toBe(vector.infoHash);
     });
   }
 
   it("info hash is exactly 20 ASCII characters", () => {
     for (const vector of GOLDEN_VECTORS) {
-      const infoHash = getStreamHash(vector.swarmKey);
+      const infoHash = computeInfoHash(vector.streamSwarmId);
       expect(infoHash).toHaveLength(20);
       expect(new TextEncoder().encode(infoHash)).toHaveLength(20);
     }
+  });
+
+  it("composes the default stream swarm ID from raw properties", () => {
+    for (const vector of GOLDEN_VECTORS) {
+      expect(
+        computeStreamSwarmIdFromProperties({
+          swarmId: SWARM_ID,
+          streamType: vector.streamType,
+          properties: vector.props,
+        }),
+      ).toBe(vector.streamSwarmId);
+    }
+  });
+
+  it("uses peer protocol version v2", () => {
+    expect(PEER_PROTOCOL_VERSION).toBe("v2");
   });
 });
 

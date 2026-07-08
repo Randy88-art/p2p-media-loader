@@ -23,7 +23,7 @@ export interface SegmentStorage {
   /**
    * Provides the storage with information about a segment requested by the player.
    * @param swarmId The swarm identifier.
-   * @param streamId The stream identifier.
+   * @param streamSwarmId The stream's stream swarm ID (`Stream.streamSwarmId`), unique per stream identity.
    * @param segmentId The segment identifier.
    * @param startTime The start time of the segment.
    * @param endTime The end time of the segment.
@@ -32,7 +32,7 @@ export interface SegmentStorage {
    */
   onSegmentRequested(
     swarmId: string,
-    streamId: string,
+    streamSwarmId: string,
     segmentId: number,
     startTime: number,
     endTime: number,
@@ -43,7 +43,7 @@ export interface SegmentStorage {
   /**
    * Stores the data for a specific segment.
    * @param swarmId The swarm identifier.
-   * @param streamId The stream identifier.
+   * @param streamSwarmId The stream's stream swarm ID (`Stream.streamSwarmId`), unique per stream identity.
    * @param segmentId The segment identifier.
    * @param data The segment data to store.
    * @param startTime The start time of the segment.
@@ -53,7 +53,7 @@ export interface SegmentStorage {
    */
   storeSegment(
     swarmId: string,
-    streamId: string,
+    streamSwarmId: string,
     segmentId: number,
     data: ArrayBuffer,
     startTime: number,
@@ -65,12 +65,12 @@ export interface SegmentStorage {
   /**
    * Retrieves the data for a specific segment.
    * @param swarmId The swarm identifier.
-   * @param streamId The stream identifier.
+   * @param streamSwarmId The stream's stream swarm ID (`Stream.streamSwarmId`), unique per stream identity.
    * @param segmentId The segment identifier.
    */
   getSegmentData(
     swarmId: string,
-    streamId: string,
+    streamSwarmId: string,
     segmentId: number,
   ): Promise<ArrayBuffer | undefined>;
 
@@ -85,25 +85,29 @@ export interface SegmentStorage {
   /**
    * Checks if a specific segment is present in the storage.
    * @param swarmId The swarm identifier.
-   * @param streamId The stream identifier.
+   * @param streamSwarmId The stream's stream swarm ID (`Stream.streamSwarmId`), unique per stream identity.
    * @param segmentId The segment identifier.
    * @returns `true` if the segment is in the storage, otherwise `false`.
    */
-  hasSegment(swarmId: string, streamId: string, segmentId: number): boolean;
+  hasSegment(
+    swarmId: string,
+    streamSwarmId: string,
+    segmentId: number,
+  ): boolean;
 
   /**
    * Retrieves the IDs of all segments for a specific stream currently stored in the storage.
    * @param swarmId The swarm identifier.
-   * @param streamId The stream identifier.
+   * @param streamSwarmId The stream's stream swarm ID (`Stream.streamSwarmId`), unique per stream identity.
    */
-  getStoredSegmentIds(swarmId: string, streamId: string): number[];
+  getStoredSegmentIds(swarmId: string, streamSwarmId: string): number[];
 
   /**
    * Sets the callback function to be invoked when segments are added to or removed from the storage.
-   * @param callback The callback function, which receives the `streamId` of the affected stream.
+   * @param callback The callback function, which receives the `streamSwarmId` of the affected stream.
    */
   setSegmentChangeCallback(
-    callback: ((streamId: string) => void) | undefined,
+    callback: ((streamSwarmId: string) => void) | undefined,
   ): void;
 
   /**

@@ -10,7 +10,6 @@ import {
 import { RequestsContainer } from "../requests/request-container.js";
 import * as LoggerUtils from "../utils/logger.js";
 import { EventTarget } from "../utils/event-target.js";
-import * as StreamUtils from "../utils/stream.js";
 import { WebTorrentSocketPool } from "../webtorrent/webtorrent-socket-pool/index.js";
 
 type P2PLoaderContainerItem = {
@@ -24,7 +23,6 @@ export class P2PLoadersContainer {
   readonly #loaders = new Map<string, P2PLoaderContainerItem>();
   #currentLoaderItem: P2PLoaderContainerItem;
   readonly #logger = debug("p2pml-core:p2p-loaders-container");
-  readonly #streamManifestUrl: string;
   readonly #requests: RequestsContainer;
   readonly #segmentStorage: SegmentStorage;
   readonly #config: StreamConfig;
@@ -34,7 +32,6 @@ export class P2PLoadersContainer {
   readonly #onSegmentAnnouncement: () => void;
 
   constructor(
-    streamManifestUrl: string,
     stream: StreamWithSegments,
     requests: RequestsContainer,
     segmentStorage: SegmentStorage,
@@ -44,7 +41,6 @@ export class P2PLoadersContainer {
     peerId: string,
     onSegmentAnnouncement: () => void,
   ) {
-    this.#streamManifestUrl = streamManifestUrl;
     this.#requests = requests;
     this.#segmentStorage = segmentStorage;
     this.#config = config;
@@ -64,7 +60,6 @@ export class P2PLoadersContainer {
       throw new Error("Loader for this stream already exists");
     }
     const loader = new P2PLoader(
-      this.#streamManifestUrl,
       stream,
       this.#requests,
       this.#segmentStorage,
@@ -101,14 +96,10 @@ export class P2PLoadersContainer {
   }
 
   changeCurrentLoader(stream: StreamWithSegments) {
-    const swarmId = this.#config.swarmId ?? this.#streamManifestUrl;
-    const streamSwarmId = StreamUtils.getStreamSwarmId(
-      swarmId,
-      this.#currentLoaderItem.stream,
-    );
+    const currentStream = this.#currentLoaderItem.stream;
     const ids = this.#segmentStorage.getStoredSegmentIds(
-      swarmId,
-      streamSwarmId,
+      currentStream.swarmId,
+      currentStream.streamSwarmId,
     );
     if (!ids.length) this.#destroyAndRemoveLoader(this.#currentLoaderItem);
     else this.#setLoaderDestroyTimeout(this.#currentLoaderItem);
