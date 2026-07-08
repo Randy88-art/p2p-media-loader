@@ -661,11 +661,13 @@ For full control, configure a custom `streamSwarmIdBuilder` on the client and ap
 const config = {
   swarmId: videoUuid,
   streamSwarmIdBuilder: ({ swarmId, streamType, properties }) =>
-    `my-app-${swarmId}-${streamType}-${properties.height ?? 0}`,
+    `my-app-${swarmId}-${streamType}-${properties.height ?? 0}-${properties.bitrate ?? 0}`,
 };
 
 // Server (per quality, at transcode time)
-const infoHash = computeInfoHash(`my-app-${videoUuid}-main-${height}`);
+const infoHash = computeInfoHash(
+  `my-app-${videoUuid}-main-${height}-${bitrate}`,
+);
 ```
 
-The stream swarm ID must be deterministic and identical across all peers of a swarm, and distinct streams must produce distinct IDs. It cannot be changed at runtime. Clients can also observe each registered stream's computed identity through the `onStreamAdded` core event.
+The stream swarm ID must be deterministic and identical across all peers of a swarm, and **every distinct stream must map to a distinct ID**. Include enough properties to guarantee that: resolution alone collides on ladders with several bitrates at the same resolution, so the example above adds `bitrate`. If your ladder can have several renditions sharing those fields (e.g. different codecs at the same resolution and bitrate), add the distinguishing property too, or incorporate the stream's `identityHash` (reproduce it server-side with `computeStreamIdentityHash(properties)`). Registering two different streams with the same ID throws. The builder cannot be changed at runtime. Clients can also observe each registered stream's computed identity through the `onStreamAdded` core event.

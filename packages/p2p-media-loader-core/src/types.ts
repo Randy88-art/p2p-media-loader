@@ -486,8 +486,13 @@ export type StreamConfig = {
    * on a private tracker.
    *
    * The function must be deterministic and identical across all peers of the
-   * swarm: peers whose streams resolve to the same infohash exchange segments
-   * with each other, so distinct streams must produce distinct IDs.
+   * swarm, and every distinct stream must map to a distinct ID: peers whose
+   * streams resolve to the same infohash exchange segments with each other, and
+   * registering two different streams with the same ID throws. Include enough
+   * properties to guarantee uniqueness — resolution alone collides on ladders
+   * with several bitrates at the same resolution. If in doubt, incorporate the
+   * `identityHash` from the context (reproduce it server-side with
+   * `computeStreamIdentityHash`).
    *
    * Called once per stream at registration. This property cannot be changed
    * at runtime.
@@ -503,8 +508,9 @@ export type StreamConfig = {
    *
    * @example
    * ```typescript
+   * // Include bitrate: resolution alone collides on multi-bitrate ladders.
    * streamSwarmIdBuilder: ({ swarmId, streamType, properties }) =>
-   *   `my-app-${swarmId}-${streamType}-${properties.height ?? 0}`,
+   *   `my-app-${swarmId}-${streamType}-${properties.height ?? 0}-${properties.bitrate ?? 0}`,
    * ```
    */
   streamSwarmIdBuilder?: (
