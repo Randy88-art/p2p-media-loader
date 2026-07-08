@@ -1,12 +1,12 @@
 import { expect, test } from "vitest";
-import { filterUndefinedProps, overrideConfig } from "../src/utils/utils";
+import { filterUndefinedProps, overrideConfig } from "../src/utils/utils.js";
 import {
   CommonCoreConfig,
   CoreConfig,
   DynamicCoreConfig,
   StreamConfig,
-} from "../src/types";
-import { Core } from "../src/core";
+} from "../src/types.js";
+import { Core } from "../src/core.js";
 
 test("override configs", () => {
   const coreConfig: CoreConfig = {
