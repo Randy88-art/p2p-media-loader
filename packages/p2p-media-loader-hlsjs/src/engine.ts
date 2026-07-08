@@ -296,6 +296,11 @@ export class HlsJsP2PEngine {
       this.core.setManifestResponseUrl(networkDetails.responseURL);
     } else if (networkDetails instanceof Response) {
       this.core.setManifestResponseUrl(networkDetails.url);
+    } else {
+      // Custom hls.js loaders may report networkDetails of any shape.
+      // Fall back to the request URL so stream registration, which
+      // requires a resolvable swarm ID, does not depend on the loader.
+      this.core.setManifestResponseUrl(data.url);
     }
     this.segmentManager.processMainManifest(data);
   };

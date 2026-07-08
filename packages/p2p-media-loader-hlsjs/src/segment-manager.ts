@@ -4,7 +4,12 @@ import type {
   LevelUpdatedData,
   AudioTrackLoadedData,
 } from "hls.js";
-import { Core, Segment } from "p2p-media-loader-core";
+import {
+  Core,
+  Segment,
+  StreamRegistration,
+  debug,
+} from "p2p-media-loader-core";
 import {
   getAudioStreamProperties,
   getVideoStreamProperties,
@@ -12,6 +17,7 @@ import {
 
 export class SegmentManager {
   core: Core;
+  private readonly logger = debug("p2pml-hlsjs:segment-manager");
 
   constructor(core: Core) {
     this.core = core;
@@ -23,7 +29,7 @@ export class SegmentManager {
 
     for (const level of levels) {
       const { url } = level;
-      this.core.addStreamIfNoneExists({
+      this.addStream({
         runtimeId: Array.isArray(url) ? (url as string[])[0] : url,
         type: "main",
         properties: getVideoStreamProperties(level),
@@ -32,11 +38,23 @@ export class SegmentManager {
 
     for (const track of audioTracks) {
       const { url } = track;
-      this.core.addStreamIfNoneExists({
+      this.addStream({
         runtimeId: Array.isArray(url) ? (url as string[])[0] : url,
         type: "secondary",
         properties: getAudioStreamProperties(track),
       });
+    }
+  }
+
+  private addStream(stream: StreamRegistration) {
+    // Isolate per-stream registration failures: this method runs inside
+    // hls.js event dispatch, so a throw would abort manifest processing.
+    // A stream that fails to register stays unknown to the core and its
+    // segments load through the default hls.js loader without P2P.
+    try {
+      this.core.addStreamIfNoneExists(stream);
+    } catch (error) {
+      this.logger(`failed to register stream ${stream.runtimeId}:`, error);
     }
   }
 
