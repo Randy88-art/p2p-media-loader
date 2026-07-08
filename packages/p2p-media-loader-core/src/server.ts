@@ -27,6 +27,7 @@
 export {
   computeStreamIdentityHash,
   computeStreamSwarmId,
+  buildStreamSwarmId,
   computeInfoHash,
   PEER_PROTOCOL_VERSION,
 } from "./stream-identity.js";

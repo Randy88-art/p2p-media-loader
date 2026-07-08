@@ -497,9 +497,11 @@ export type StreamConfig = {
    * Called once per stream at registration. This property cannot be changed
    * at runtime.
    *
-   * @param context - The stream identity data the ID may be built from.
+   * @param context - The stream identity data the ID may be built from,
+   * including the ready-made `defaultStreamSwarmId`.
    * @returns The stream swarm ID, or `undefined` to use the default
-   * derivation (`` `${peerProtocolVersion}-${swarmId}-${streamType}-${identityHash}` ``).
+   * derivation (`` `${peerProtocolVersion}-${swarmId}-${streamType}-${identityHash}` ``,
+   * provided as `context.defaultStreamSwarmId`).
    *
    * @default
    * ```typescript
@@ -678,6 +680,13 @@ export type StreamSwarmIdBuilderContext = {
 
   /** Stream identity hash derived from the normalized stream properties. The same for all peers. */
   identityHash: string;
+
+  /**
+   * The stream swarm ID the default derivation would produce:
+   * `${peerProtocolVersion}-${swarmId}-${streamType}-${identityHash}`.
+   * Useful as a base for custom IDs, e.g. `` `${tenant}-${defaultStreamSwarmId}` ``.
+   */
+  defaultStreamSwarmId: string;
 
   /** Version of the peer swarm protocol used in the default stream swarm ID derivation. */
   peerProtocolVersion: string;
@@ -916,9 +925,9 @@ export type PeerConnectErrorDetails = {
 };
 
 /** Represents the details about a registered stream. */
-export type StreamAddedDetails = {
+export type StreamAddedDetails<TStream extends Stream = Stream> = {
   /** The registered stream with its computed identity. */
-  stream: Stream;
+  stream: TStream;
 };
 
 /**
@@ -930,6 +939,10 @@ export type CoreEventMap = {
    * Invoked when a stream is registered in the Core, once per stream.
    * The stream carries its computed identity, including the infohash
    * announced to trackers for its swarm.
+   *
+   * The event map is not generic, so the stream is typed as the base
+   * `Stream`. Consumers of a `Core<TStream>` receive their extended stream
+   * at runtime and may narrow via `StreamAddedDetails<TStream>`.
    *
    * @param params - Contains the registered stream.
    */

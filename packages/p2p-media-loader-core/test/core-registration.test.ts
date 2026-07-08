@@ -101,9 +101,27 @@ describe("stream registration", () => {
       runtimeId: "level-0",
       streamType: "main",
       identityHash: "mskAojmI+F5YyLLvSP3sdMO5nII=",
+      defaultStreamSwarmId: `v2-${MANIFEST_URL}-main-mskAojmI+F5YyLLvSP3sdMO5nII=`,
       peerProtocolVersion: "v2",
     });
     expect(receivedContext?.properties).toEqual(PROPS_1080P);
+  });
+
+  it("supports building on the default stream swarm ID from the context", () => {
+    const core = createCore({
+      streamSwarmIdBuilder: ({ defaultStreamSwarmId }) =>
+        `tenant-a-${defaultStreamSwarmId}`,
+    });
+    core.addStreamIfNoneExists({
+      runtimeId: "level-0",
+      type: "main",
+      properties: PROPS_1080P,
+    });
+
+    const expectedId = `tenant-a-v2-${MANIFEST_URL}-main-mskAojmI+F5YyLLvSP3sdMO5nII=`;
+    const stream = core.getStream("level-0");
+    expect(stream?.streamSwarmId).toBe(expectedId);
+    expect(stream?.infoHash).toBe(computeInfoHash(expectedId));
   });
 
   it("falls back to the default derivation when the builder returns undefined", () => {
@@ -141,6 +159,8 @@ describe("stream registration", () => {
 
   it("throws when different stream identities collide on one stream swarm ID", () => {
     const core = createCore({ streamSwarmIdBuilder: () => "same-key" });
+    const onStreamAdded = vi.fn();
+    core.addEventListener("onStreamAdded", onStreamAdded);
     core.addStreamIfNoneExists({
       runtimeId: "level-0",
       type: "main",
@@ -154,6 +174,11 @@ describe("stream registration", () => {
         properties: PROPS_360P,
       }),
     ).toThrow(/same stream swarm ID/);
+
+    // A failed registration must not leave partial state behind.
+    expect(core.getStream("level-1")).toBeUndefined();
+    expect(core.getStream("level-0")).toBeDefined();
+    expect(onStreamAdded).toHaveBeenCalledTimes(1);
   });
 
   it("throws when a builder collapses different stream types onto one ID", () => {

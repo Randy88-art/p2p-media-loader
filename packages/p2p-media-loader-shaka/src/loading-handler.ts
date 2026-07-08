@@ -36,6 +36,13 @@ export class Loader {
 
     const loading = this.defaultLoad() as LoadingHandlerResult;
     if (requestType === RequestType.MANIFEST) {
+      // Ordering invariant: this continuation is attached to the manifest
+      // promise BEFORE Shaka's parser receives it, so setManifestResponseUrl
+      // runs in an earlier microtask than manifest processing — stream
+      // registration, which requires a resolvable swarm ID, depends on it.
+      // Manifests that bypass the networking engine (e.g. offline playback)
+      // never reach this handler; their streams are skipped by the
+      // registration guard and play without P2P.
       this.handleManifestLoading(loading.promise).catch(() => undefined);
     }
     return loading;

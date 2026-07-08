@@ -99,6 +99,7 @@ export class Core<TStream extends Stream = Stream> {
   };
   private segmentStorage?: SegmentStorage;
   private readonly webTorrentSocketPool = new WebTorrentSocketPool();
+  private readonly logger = debug("p2pml-core:core");
   private readonly socketPoolLogger = debug(
     "p2pml-core:webtorrent-socket-pool",
   );
@@ -347,6 +348,7 @@ export class Core<TStream extends Stream = Stream> {
         streamType: stream.type,
         properties,
         identityHash,
+        defaultStreamSwarmId: streamSwarmId,
         peerProtocolVersion: PEER_PROTOCOL_VERSION,
       });
 
@@ -529,6 +531,12 @@ export class Core<TStream extends Stream = Stream> {
   /**
    * Cleans up resources used by the Core instance, including destroying any active stream loaders
    * and clearing stored segments.
+   *
+   * Event listeners deliberately survive: the player integrations reuse one
+   * Core instance across media sources, destroying it between loads, and
+   * subscriptions (e.g. `onStreamAdded`, `onPeerConnect`) are expected to
+   * keep working after the next source loads. Use `removeEventListener` to
+   * unsubscribe explicitly.
    */
   destroy(): void {
     this.streams.clear();
@@ -621,11 +629,11 @@ export class Core<TStream extends Stream = Stream> {
     // Stream identity is derived from these properties once, at stream
     // registration; changing them at runtime would silently desynchronize
     // the announced swarms from the registered streams.
-    const sanitizedDynamicConfig = Core.stripStaticOnlyProps(dynamicConfig);
+    const sanitizedDynamicConfig = this.stripStaticOnlyProps(dynamicConfig);
     const sanitizedMainStream =
-      mainStream && Core.stripStaticOnlyProps(mainStream);
+      mainStream && this.stripStaticOnlyProps(mainStream);
     const sanitizedSecondaryStream =
-      secondaryStream && Core.stripStaticOnlyProps(secondaryStream);
+      secondaryStream && this.stripStaticOnlyProps(secondaryStream);
 
     overrideConfig(this.commonCoreConfig, sanitizedDynamicConfig);
     overrideConfig(this.mainStreamConfig, sanitizedDynamicConfig);
@@ -640,12 +648,19 @@ export class Core<TStream extends Stream = Stream> {
     }
   }
 
-  private static stripStaticOnlyProps<T extends object>(
+  private stripStaticOnlyProps<T extends object>(
     config: T,
   ): Omit<T, "swarmId" | "streamSwarmIdBuilder"> {
     if (!("swarmId" in config) && !("streamSwarmIdBuilder" in config)) {
       return config;
     }
+
+    // TypeScript excludes these properties from DynamicCoreConfig, but
+    // plain-JS callers can still pass them — signal instead of silently
+    // ignoring the update.
+    this.logger(
+      "swarmId and streamSwarmIdBuilder cannot be changed at runtime; ignoring them in the dynamic configuration update",
+    );
 
     const sanitized = { ...config } as T & {
       swarmId?: unknown;
