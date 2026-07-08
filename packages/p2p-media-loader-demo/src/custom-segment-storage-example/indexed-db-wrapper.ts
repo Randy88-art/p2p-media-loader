@@ -25,11 +25,17 @@ export class IndexedDbWrapper {
   }
 
   private createObjectStores(db: IDBDatabase): void {
-    if (!db.objectStoreNames.contains(this.dataItemsStoreName)) {
-      db.createObjectStore(this.dataItemsStoreName, { keyPath: "storageId" });
-    }
-    if (!db.objectStoreNames.contains(this.infoItemsStoreName)) {
-      db.createObjectStore(this.infoItemsStoreName, { keyPath: "storageId" });
+    // Runs only on version upgrades (and fresh databases). The stored
+    // segments are a cache, so records persisted by a previous schema
+    // version are dropped rather than migrated.
+    for (const storeName of [
+      this.dataItemsStoreName,
+      this.infoItemsStoreName,
+    ]) {
+      if (db.objectStoreNames.contains(storeName)) {
+        db.deleteObjectStore(storeName);
+      }
+      db.createObjectStore(storeName, { keyPath: "storageId" });
     }
   }
 

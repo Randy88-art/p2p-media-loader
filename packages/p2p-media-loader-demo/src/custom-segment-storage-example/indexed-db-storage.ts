@@ -44,7 +44,10 @@ function getStorageItemId(streamSwarmId: string, segmentId: number) {
 const INFO_ITEMS_STORE_NAME = "segmentInfo";
 const DATA_ITEMS_STORE_NAME = "segmentData";
 const DB_NAME = "p2p-media-loader";
-const DB_VERSION = 1;
+// Version 2: the persisted segment info field streamId was renamed to
+// streamSwarmId. Bump on every change to the persisted record shape — the
+// upgrade handler drops and recreates the stores (cached data is disposable).
+const DB_VERSION = 2;
 const BYTES_PER_MB = 1048576;
 
 export class IndexedDbStorage implements SegmentStorage {
@@ -165,7 +168,11 @@ export class IndexedDbStorage implements SegmentStorage {
     }
   }
 
-  async getSegmentData(_swarmId: string, streamSwarmId: string, segmentId: number) {
+  async getSegmentData(
+    _swarmId: string,
+    streamSwarmId: string,
+    segmentId: number,
+  ) {
     const segmentStorageId = getStorageItemId(streamSwarmId, segmentId);
     try {
       const result = await this.db.get<SegmentDataItem>(
