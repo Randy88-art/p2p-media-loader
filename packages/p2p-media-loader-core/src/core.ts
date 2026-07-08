@@ -640,15 +640,20 @@ export class Core<TStream extends Stream = Stream> {
     }
   }
 
-  private static stripStaticOnlyProps<T extends object>(config: T): T {
+  private static stripStaticOnlyProps<T extends object>(
+    config: T,
+  ): Omit<T, "swarmId" | "streamSwarmIdBuilder"> {
     if (!("swarmId" in config) && !("streamSwarmIdBuilder" in config)) {
       return config;
     }
 
-    const sanitized = { ...config } as Record<string, unknown>;
+    const sanitized = { ...config } as T & {
+      swarmId?: unknown;
+      streamSwarmIdBuilder?: unknown;
+    };
     delete sanitized.swarmId;
     delete sanitized.streamSwarmIdBuilder;
-    return sanitized as T;
+    return sanitized;
   }
 
   private destroyStreamLoader(streamType: StreamType) {
