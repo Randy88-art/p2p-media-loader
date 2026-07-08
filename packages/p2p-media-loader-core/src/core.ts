@@ -364,8 +364,16 @@ export class Core<TStream extends Stream = Stream> {
     }
 
     for (const registered of this.streams.values()) {
+      if (registered.streamSwarmId !== streamSwarmId) continue;
+      // Sharing a stream swarm ID is only legitimate for streams with the same
+      // default identity (e.g. the same rendition served from multiple CDNs).
+      // A stream's identity is the whole (swarmId, type, identityHash) tuple —
+      // identityHash alone excludes type and swarmId, so comparing it is not
+      // enough. If any part differs, a custom builder has merged distinct
+      // streams into one swarm and peers would exchange wrong-stream segments.
       if (
-        registered.streamSwarmId === streamSwarmId &&
+        registered.swarmId !== swarmId ||
+        registered.type !== stream.type ||
         registered.identityHash !== identityHash
       ) {
         throw new Error(

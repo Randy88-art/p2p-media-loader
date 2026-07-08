@@ -156,6 +156,28 @@ describe("stream registration", () => {
     ).toThrow(/same stream swarm ID/);
   });
 
+  it("throws when a builder collapses different stream types onto one ID", () => {
+    // A builder that ignores streamType merges a main and a secondary stream
+    // that happen to share an identityHash (both have blanked/{bitrate:0}
+    // metadata) into one swarm — peers would then swap audio/video segments.
+    const core = createCore({
+      streamSwarmIdBuilder: ({ properties }) => `k-${properties.bitrate ?? 0}`,
+    });
+    core.addStreamIfNoneExists({
+      runtimeId: "video",
+      type: "main",
+      properties: { bitrate: 0 },
+    });
+
+    expect(() =>
+      core.addStreamIfNoneExists({
+        runtimeId: "audio",
+        type: "secondary",
+        properties: { bitrate: 0 },
+      }),
+    ).toThrow(/different identities/);
+  });
+
   it("allows identical identities under different runtime IDs to share a swarm", () => {
     const core = createCore();
     core.addStreamIfNoneExists({
