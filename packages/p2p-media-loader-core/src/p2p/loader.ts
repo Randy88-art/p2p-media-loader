@@ -265,6 +265,7 @@ export class P2PLoader {
   #onPeerConnectedWebTorrent = (event: {
     peerId: string;
     channel: RTCDataChannel;
+    trackerUrl: string;
     close: (error?: PeerError) => void;
   }) => {
     this.#webtorrentManagerLogger(`peerConnected: peerId=${event.peerId}`);
@@ -318,6 +319,7 @@ export class P2PLoader {
       peerId: event.peerId,
       infoHash: this.#stream.infoHash,
       streamType: this.#stream.type,
+      trackerUrl: event.trackerUrl,
     });
 
     if (this.#config.isP2PUploadDisabled) return;
@@ -329,6 +331,7 @@ export class P2PLoader {
   #onPeerDisconnectedWebTorrent = (
     event: {
       peerId: string;
+      trackerUrl: string;
     } & (
       | { error: PeerError; disconnectReason?: never }
       | { error?: never; disconnectReason: string }
@@ -360,6 +363,7 @@ export class P2PLoader {
       peerId: peer.id,
       infoHash: this.#stream.infoHash,
       streamType: this.#stream.type,
+      trackerUrl: event.trackerUrl,
     });
   };
 

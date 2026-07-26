@@ -84,6 +84,9 @@ infohash computation.
 - `Core.getStreams()` — returns all currently registered streams with their
   computed identities, so the announced infohashes can be listed at any time,
   not just at registration.
+- `PeerDetails.trackerUrl` — the `onPeerConnect` and `onPeerClose` payloads now
+  report the tracker URL the peer was discovered from, matching
+  `onPeerConnectError`.
 
 ### Tightened read-only types
 

@@ -755,6 +755,8 @@ export type PeerDetails = {
   infoHash: string;
   /** The type of stream that the peer is connected to. */
   streamType: StreamType;
+  /** The tracker URL that the peer was discovered from. */
+  trackerUrl: string;
 };
 
 /** Represents the types of errors that can occur during a peer connection. */
