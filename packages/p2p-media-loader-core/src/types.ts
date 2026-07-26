@@ -433,6 +433,7 @@ export type StreamConfig = {
    * ```typescript
    * [
    *   "wss://tracker.novage.com.ua",
+   *   "wss://tracker.webtorrent.dev",
    *   "wss://tracker.openwebtorrent.com",
    * ]
    * ```

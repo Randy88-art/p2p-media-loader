@@ -64,6 +64,7 @@ export class Core<TStream extends Stream = Stream> {
     p2pErrorRetries: 3,
     announceTrackers: [
       "wss://tracker.novage.com.ua",
+      "wss://tracker.webtorrent.dev",
       "wss://tracker.openwebtorrent.com",
     ],
     rtcConfig: {
