@@ -314,6 +314,18 @@ export class Core<TStream extends Stream = Stream> {
   }
 
   /**
+   * Retrieves all currently registered streams with their computed identities,
+   * including the infohashes announced to trackers. Unlike the `onStreamAdded`
+   * event, this reflects the full set at any moment, so late subscribers can
+   * catch up on streams registered before they attached.
+   *
+   * @returns The registered streams, in registration order.
+   */
+  getStreams(): TStream[] {
+    return [...this.streams.values()];
+  }
+
+  /**
    * Ensures a stream exists in the map; adds it if it does not.
    *
    * Computes the stream's identity (`swarmId`, `identityHash`, `streamSwarmId`,
@@ -398,8 +410,12 @@ export class Core<TStream extends Stream = Stream> {
     } as unknown as StreamWithSegments<TStream>;
 
     this.streams.set(stream.runtimeId, registeredStream);
+
+    // Dispatch a snapshot without the internal segments map, so listeners
+    // cannot reach into core state.
+    const { segments: _segments, ...streamSnapshot } = registeredStream;
     this.eventTarget.dispatchEvent("onStreamAdded", {
-      stream: registeredStream,
+      stream: streamSnapshot as unknown as TStream,
     });
   }
 
@@ -418,16 +434,23 @@ export class Core<TStream extends Stream = Stream> {
     const stream = this.streams.get(streamRuntimeId);
     if (!stream) return;
 
+    // The public type exposes the segments map as ReadonlyMap; the core is
+    // its sole writer.
+    const segments = stream.segments as Map<
+      string,
+      SegmentWithStream<TStream>
+    >;
+
     if (addSegments) {
       for (const segment of addSegments) {
-        if (stream.segments.has(segment.runtimeId)) continue; // should not happen
-        stream.segments.set(segment.runtimeId, { ...segment, stream });
+        if (segments.has(segment.runtimeId)) continue; // should not happen
+        segments.set(segment.runtimeId, { ...segment, stream });
       }
     }
 
     if (removeSegmentIds) {
       for (const id of removeSegmentIds) {
-        stream.segments.delete(id);
+        segments.delete(id);
       }
     }
 

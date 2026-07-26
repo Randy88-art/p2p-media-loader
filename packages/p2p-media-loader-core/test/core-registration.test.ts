@@ -236,8 +236,21 @@ describe("stream registration", () => {
 
     expect(onStreamAdded).toHaveBeenCalledTimes(1);
     const { stream } = onStreamAdded.mock.calls[0][0];
-    expect(stream).toBe(core.getStream("level-0"));
     expect(stream.infoHash).toBe("aEnMPupzZeID9k+gkk5Y");
+
+    // The payload is a snapshot of the registered stream's identity,
+    // detached from the core's internal stream state.
+    const registered = core.getStream("level-0");
+    expect(stream).not.toBe(registered);
+    expect("segments" in stream).toBe(false);
+    expect(stream).toMatchObject({
+      runtimeId: registered?.runtimeId,
+      type: registered?.type,
+      swarmId: registered?.swarmId,
+      identityHash: registered?.identityHash,
+      streamSwarmId: registered?.streamSwarmId,
+      infoHash: registered?.infoHash,
+    });
   });
 
   it("freezes stream properties at registration", () => {
@@ -254,6 +267,33 @@ describe("stream registration", () => {
     // Mutating the caller's object must not affect the registered stream.
     mutableProperties.height = 720;
     expect(stream?.properties.height).toBe(1080);
+  });
+
+  it("lists all registered streams in registration order", () => {
+    const core = createCore();
+    expect(core.getStreams()).toEqual([]);
+
+    core.addStreamIfNoneExists({
+      runtimeId: "level-0",
+      type: "main",
+      properties: PROPS_1080P,
+    });
+    core.addStreamIfNoneExists({
+      runtimeId: "level-1",
+      type: "main",
+      properties: PROPS_360P,
+    });
+
+    const streams = core.getStreams();
+    expect(streams.map((s) => s.runtimeId)).toEqual(["level-0", "level-1"]);
+    expect(streams[0]).toBe(core.getStream("level-0"));
+    expect(streams.map((s) => s.infoHash)).toEqual([
+      core.getStream("level-0")?.infoHash,
+      core.getStream("level-1")?.infoHash,
+    ]);
+
+    core.destroy();
+    expect(core.getStreams()).toEqual([]);
   });
 
   it("keeps identity fields stable across segment updates", () => {

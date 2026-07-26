@@ -72,7 +72,21 @@ infohash computation.
   stream swarm ID per stream, making the announced infohash predictable on a server
   (see "Predicting swarm infohashes on a server" in the API documentation).
 - `onStreamAdded` core event — fired once per registered stream with its
-  computed identity, including `infoHash`.
+  computed identity, including `infoHash`. The payload is a snapshot detached
+  from the core's internal stream state.
+- `Core.getStreams()` — returns all currently registered streams with their
+  computed identities, so the announced infohashes can be listed at any time,
+  not just at registration.
+
+### Tightened read-only types
+
+- `StreamWithSegments.segments` (returned by `Core.getStream`) is now typed
+  `ReadonlyMap` — it is the core's live segment registry, managed exclusively
+  through `Core.updateStream`. Mutating it was never supported.
+- `ByteRange.start`/`ByteRange.end` are now `readonly`.
+- `SegmentResponse.data` may reference the buffer the core keeps in segment
+  storage for P2P upload: treat it as read-only and copy it (`data.slice(0)`)
+  before transferring it to a worker.
 
 ### `SegmentStorage` interface
 

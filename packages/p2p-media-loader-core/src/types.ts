@@ -6,9 +6,9 @@ export type StreamType = "main" | "secondary";
 /** Represents a range of bytes, used for specifying a segment of data to download. */
 export type ByteRange = {
   /** The starting byte index of the range. */
-  start: number;
+  readonly start: number;
   /** The ending byte index of the range. */
-  end: number;
+  readonly end: number;
 };
 
 /** Describes a media segment with its unique identifiers, location, and timing information. */
@@ -39,10 +39,12 @@ export type SegmentWithStream<TStream extends Stream = Stream> = Segment & {
 
 /**
  * Represents a stream that includes multiple segments, each associated with the stream.
+ * The segments map is read-only: it is the core's live registry, managed
+ * exclusively through `Core.updateStream`.
  * @template TStream Type of the underlying stream data structure.
  */
 export type StreamWithSegments<TStream extends Stream = Stream> = TStream & {
-  readonly segments: Map<string, SegmentWithStream<TStream>>;
+  readonly segments: ReadonlyMap<string, SegmentWithStream<TStream>>;
 };
 
 /**
@@ -927,7 +929,13 @@ export type PeerConnectErrorDetails = {
 
 /** Represents the details about a registered stream. */
 export type StreamAddedDetails<TStream extends Stream = Stream> = {
-  /** The registered stream with its computed identity. */
+  /**
+   * The registered stream with its computed identity.
+   *
+   * A snapshot taken at registration, detached from the core's internal
+   * stream state. The identity fields never change after registration, so
+   * the snapshot stays accurate for the stream's lifetime.
+   */
   stream: TStream;
 };
 
@@ -1111,7 +1119,13 @@ export class RequestError<
 
 /** Represents the response from a segment request, including the data and measured bandwidth. */
 export type SegmentResponse = {
-  /** Segment data as an ArrayBuffer. */
+  /**
+   * Segment data as an ArrayBuffer.
+   *
+   * May reference the same buffer the core keeps in segment storage for P2P
+   * upload. Treat it as read-only and never transfer it to a worker — copy it
+   * first (e.g. `data.slice(0)`), otherwise peers receive corrupted segments.
+   */
   data: ArrayBuffer;
 
   /** Measured bandwidth for the segment download, in bytes per second. */

@@ -59,7 +59,7 @@ function mapSegmentWithStreamToSegment(segment: SegmentWithStream): Segment {
     runtimeId: segment.runtimeId,
     externalId: segment.externalId,
     url: segment.url,
-    byteRange: segment.byteRange,
+    byteRange: segment.byteRange && { ...segment.byteRange },
     startTime: segment.startTime,
     endTime: segment.endTime,
   };
