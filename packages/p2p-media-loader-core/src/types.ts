@@ -767,8 +767,9 @@ export type PeerErrorType =
   | "connection-lost";
 
 /**
- * Base class for domain-specific errors carrying a machine-readable type discriminator.
- * @internal
+ * Base class for all errors and warnings emitted by the library, carrying a
+ * machine-readable `type` discriminator. Use `instanceof TypedError` to catch
+ * any library error regardless of its specific class.
  */
 export abstract class TypedError<T extends string> extends Error {
   readonly cause?: unknown;
