@@ -62,8 +62,8 @@ For additional examples using npm packages, please refer to our [React demo](htt
     <script type="importmap">
       {
         "imports": {
-          "p2p-media-loader-core": "https://cdn.jsdelivr.net/npm/p2p-media-loader-core@^2/dist/p2p-media-loader-core.es.min.js",
-          "p2p-media-loader-hlsjs": "https://cdn.jsdelivr.net/npm/p2p-media-loader-hlsjs@^2/dist/p2p-media-loader-hlsjs.es.min.js"
+          "p2p-media-loader-core": "https://cdn.jsdelivr.net/npm/p2p-media-loader-core@^4/dist/p2p-media-loader-core.es.min.js",
+          "p2p-media-loader-hlsjs": "https://cdn.jsdelivr.net/npm/p2p-media-loader-hlsjs@^4/dist/p2p-media-loader-hlsjs.es.min.js"
         }
       }
     </script>
@@ -389,8 +389,8 @@ For additional examples using npm packages, please refer to our [React demo](htt
     <script type="importmap">
       {
         "imports": {
-          "p2p-media-loader-core": "https://cdn.jsdelivr.net/npm/p2p-media-loader-core@^2/dist/p2p-media-loader-core.es.min.js",
-          "p2p-media-loader-shaka": "https://cdn.jsdelivr.net/npm/p2p-media-loader-shaka@^2/dist/p2p-media-loader-shaka.es.min.js"
+          "p2p-media-loader-core": "https://cdn.jsdelivr.net/npm/p2p-media-loader-core@^4/dist/p2p-media-loader-core.es.min.js",
+          "p2p-media-loader-shaka": "https://cdn.jsdelivr.net/npm/p2p-media-loader-shaka@^4/dist/p2p-media-loader-shaka.es.min.js"
         }
       }
     </script>
