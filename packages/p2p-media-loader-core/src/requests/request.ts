@@ -1,5 +1,9 @@
 import debug from "debug";
-import { BandwidthCalculators, Playback } from "../internal-types.js";
+import {
+  BandwidthCalculators,
+  Playback,
+  SegmentWithStream,
+} from "../internal-types.js";
 import {
   CoreEventMap,
   RequestError,
@@ -7,7 +11,6 @@ import {
   RequestErrorType,
   Segment,
 } from "../types.js";
-import { SegmentWithStream } from "../internal-types.js";
 import * as StreamUtils from "../utils/stream.js";
 import * as Utils from "../utils/utils.js";
 import { EventTarget } from "../utils/event-target.js";

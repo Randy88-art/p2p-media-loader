@@ -433,9 +433,10 @@ export class Core<TStream extends Stream = Stream> {
 
     // Dispatch a snapshot without the internal segments map, so listeners
     // cannot reach into core state.
-    const { segments: _segments, ...streamSnapshot } = registeredStream;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { segments, ...streamSnapshot } = registeredStream;
     this.eventTarget.dispatchEvent("onStreamAdded", {
-      stream: streamSnapshot as unknown as TStream,
+      stream: streamSnapshot,
     });
   }
 
