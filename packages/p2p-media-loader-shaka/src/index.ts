@@ -4,5 +4,5 @@ export { Core } from "p2p-media-loader-core";
 export type {
   DynamicShakaP2PEngineConfig,
   ShakaP2PEngineConfig,
-  PartialShakaEngineConfig,
+  PartialShakaP2PEngineConfig,
 } from "./engine.js";

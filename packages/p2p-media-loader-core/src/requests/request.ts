@@ -425,7 +425,6 @@ export class Request {
     this.setStatus("succeed");
     this._totalBytes = this._loadedBytes;
     this.onSegmentLoaded({
-      segmentUrl: this.segment.url,
       segment: mapSegmentWithStreamToSegment(this.segment),
       bytesLength: this.data.byteLength,
       downloadSource: this.currentAttempt.downloadSource,

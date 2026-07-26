@@ -54,13 +54,20 @@ Registration requires the swarm ID to be resolvable: either configure
 
 ### Renamed / removed exports
 
-| v3                              | v4                                                          |
-| ------------------------------- | ----------------------------------------------------------- |
-| `generateStreamShortId(props)`  | `computeStreamIdentityHash(properties)`                     |
-| `GenerateStreamShortIdProps`    | `StreamProperties`                                          |
-| `Stream.index`                  | `Stream.identityHash`                                       |
-| — (internal `getStreamSwarmId`) | `computeStreamSwarmId({ swarmId, streamType, properties })` |
-| — (internal `getStreamHash`)    | `computeInfoHash(streamSwarmId)`                            |
+| v3                                            | v4                                                          |
+| --------------------------------------------- | ----------------------------------------------------------- |
+| `generateStreamShortId(props)`                 | `computeStreamIdentityHash(properties)`                     |
+| `GenerateStreamShortIdProps`                   | `StreamProperties`                                          |
+| `Stream.index`                                 | `Stream.identityHash`                                       |
+| — (internal `getStreamSwarmId`)                | `computeStreamSwarmId({ swarmId, streamType, properties })` |
+| — (internal `getStreamHash`)                   | `computeInfoHash(streamSwarmId)`                            |
+| `SegmentLoadDetails.segmentUrl` _(deprecated)_ | removed — use `segment.url`                                 |
+| `PartialShakaEngineConfig` (shaka package)     | `PartialShakaP2PEngineConfig`                               |
+
+The segment event payload types (`SegmentStartDetails`, `SegmentLoadDetails`,
+`SegmentErrorDetails`, `SegmentAbortDetails`) now share the common
+`SegmentEventDetails` base type. Their fields are unchanged apart from the
+`segmentUrl` removal above.
 
 The identity helpers are exported from the main entry and from the Node-safe
 `p2p-media-loader-core/server` subpath (Node.js 16+) for server-side

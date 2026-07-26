@@ -259,7 +259,8 @@ export type CommonCoreConfig = {
  *   // Optional configuration for the secondary stream
  *   swarmId: "custom swarm ID for audio stream",
  *  },
- *  ```
+ * }
+ * ```
  */
 export type CoreConfig = Partial<StreamConfig> &
   Partial<CommonCoreConfig> & {
@@ -704,12 +705,12 @@ export type StreamSwarmIdBuilderContext = {
  */
 export type DownloadSource = "http" | "p2p";
 
-/** Represents details about a segment event. */
-export type SegmentStartDetails = {
+/** Fields common to all segment event payloads. */
+export type SegmentEventDetails = {
   /** The segment that the event is about. */
   segment: Segment;
 
-  /** The origin of the segment download. */
+  /** The source of the download. */
   downloadSource: DownloadSource;
 
   /** The peer ID, if the segment is downloaded from a peer. */
@@ -722,70 +723,28 @@ export type SegmentStartDetails = {
   streamType: StreamType;
 };
 
+/** Represents details about a segment event. */
+export type SegmentStartDetails = SegmentEventDetails;
+
 /** Represents details about a segment error event. */
-export type SegmentErrorDetails = {
+export type SegmentErrorDetails = SegmentEventDetails & {
   /** The error that occurred during the segment download. */
   error: RequestError;
-
-  /** The segment that the event is about. */
-  segment: Segment;
-
-  /** The source of the download. */
-  downloadSource: DownloadSource;
-
-  /** The peer ID, if the segment was downloaded from a peer. */
-  peerId: string | undefined;
-
-  /** The info hash of the swarm that the segment belongs to. */
-  infoHash: string;
-
-  /** The type of stream that the segment is associated with. */
-  streamType: StreamType;
 };
 
 /** Represents details about a segment abort event. */
-export type SegmentAbortDetails = {
-  /** The segment that the event is about. */
-  segment: Segment;
-
-  /** The source of the download. */
+export type SegmentAbortDetails = Omit<
+  SegmentEventDetails,
+  "downloadSource"
+> & {
+  /** The source of the download, if it was determined before the abort. */
   downloadSource: DownloadSource | undefined;
-
-  /** The peer ID, if the segment was downloaded from a peer. */
-  peerId: string | undefined;
-
-  /** The info hash of the swarm that the segment belongs to. */
-  infoHash: string;
-
-  /** The type of stream that the segment is associated with. */
-  streamType: StreamType;
 };
 
 /** Represents the details about a loaded segment. */
-export type SegmentLoadDetails = {
-  /**
-   * The URL of the loaded segment
-   * @deprecated Use `segment.url` instead
-   */
-  segmentUrl: string;
-
-  /** The segment that the event is about. */
-  segment: Segment;
-
+export type SegmentLoadDetails = SegmentEventDetails & {
   /** The length of the segment in bytes. */
   bytesLength: number;
-
-  /** The source of the download. */
-  downloadSource: DownloadSource;
-
-  /** The peer ID, if the segment was downloaded from a peer. */
-  peerId: string | undefined;
-
-  /** The info hash of the swarm that the segment belongs to. */
-  infoHash: string;
-
-  /** The type of stream that the segment is associated with. */
-  streamType: StreamType;
 };
 
 /** Represents the details of a peer in a peer-to-peer network. */
@@ -874,6 +833,7 @@ export type TrackerErrorDetails = {
   error: TrackerError;
 };
 
+/** Represents the details of a tracker warning event. */
 export type TrackerWarningDetails = {
   /** The tracker URL. */
   trackerUrl: string;
