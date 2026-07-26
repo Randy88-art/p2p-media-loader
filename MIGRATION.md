@@ -74,7 +74,8 @@ Their fields are unchanged apart from the `segmentUrl` removal above and the
 
 The identity helpers are exported from the main entry and from the Node-safe
 `p2p-media-loader-core/server` subpath (Node.js 16+) for server-side
-infohash computation.
+infohash computation. The package is published as ESM only: CommonJS projects
+should load it with a dynamic `import()` (or `require()` on Node.js 20.17+).
 
 ### New APIs
 

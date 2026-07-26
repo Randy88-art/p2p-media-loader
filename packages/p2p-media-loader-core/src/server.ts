@@ -6,6 +6,13 @@
  * reproduce the exact identity values clients compute for a stream — for
  * example, to allowlist the announced infohashes on a private tracker.
  *
+ * The package is published as ESM only. From a CommonJS project, load it
+ * with a dynamic import (works on all supported Node.js versions):
+ * ```typescript
+ * const { computeInfoHash } = await import("p2p-media-loader-core/server");
+ * ```
+ * (Node.js 20.17+ can also `require()` it directly.)
+ *
  * With the default client configuration:
  * ```typescript
  * import { computeStreamSwarmId, computeInfoHash } from "p2p-media-loader-core/server";
