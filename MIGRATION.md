@@ -65,10 +65,12 @@ Registration requires the swarm ID to be resolvable: either configure
 | `PartialShakaEngineConfig` (shaka package)     | `PartialShakaP2PEngineConfig`                               |
 | `StreamWithSegments`, `SegmentWithStream`      | removed — internal types (see `Core.getStream` below)       |
 
-The segment event payload types (`SegmentStartDetails`, `SegmentLoadDetails`,
-`SegmentErrorDetails`, `SegmentAbortDetails`) now share the common
-`SegmentEventDetails` base type. Their fields are unchanged apart from the
-`segmentUrl` removal above.
+The event payload types are now composed from shared bases: the segment
+events (`SegmentStartDetails`, `SegmentLoadDetails`, `SegmentErrorDetails`,
+`SegmentAbortDetails`) extend `SegmentEventDetails`, the peer events extend
+`PeerDetails`, and the tracker events extend the new `TrackerEventDetails`.
+Their fields are unchanged apart from the `segmentUrl` removal above and the
+`trackerUrl` additions listed under "New APIs".
 
 The identity helpers are exported from the main entry and from the Node-safe
 `p2p-media-loader-core/server` subpath (Node.js 16+) for server-side
@@ -88,9 +90,9 @@ infohash computation.
 - `Core.getStreamSegmentRuntimeIds(streamRuntimeId)` — returns a snapshot set
   of the segment runtime IDs registered for a stream, in registration order.
   Replaces reading `Core.getStream(...).segments`.
-- `PeerDetails.trackerUrl` — the `onPeerConnect` and `onPeerClose` payloads now
-  report the tracker URL the peer was discovered from, matching
-  `onPeerConnectError`.
+- `PeerDetails.trackerUrl` — every peer event payload (`onPeerConnect`,
+  `onPeerClose`, `onPeerError`, `onPeerWarning`, `onPeerConnectError`) now
+  reports the tracker URL the peer was discovered from.
 
 ### `Core.getStream` no longer exposes segments
 

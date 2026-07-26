@@ -778,13 +778,7 @@ export class PeerError extends TypedError<PeerErrorType> {
 }
 
 /** Represents the details of a peer error event. */
-export type PeerErrorDetails = {
-  /** The unique identifier for a peer in the network. */
-  peerId: string;
-  /** The info hash of the swarm that the peer is part of. */
-  infoHash: string;
-  /** The type of stream that the peer is connected to. */
-  streamType: StreamType;
+export type PeerErrorDetails = PeerDetails & {
   /** The error that occurred during the peer-to-peer connection. */
   error: PeerError;
 };
@@ -798,47 +792,36 @@ export class PeerWarning extends TypedError<PeerWarningType> {
 }
 
 /** Represents the details of a peer warning event. */
-export type PeerWarningDetails = {
-  /** The unique identifier for a peer in the network. */
-  peerId: string;
-  /** The info hash of the swarm that the peer is part of. */
-  infoHash: string;
-  /** The type of stream that the peer is connected to. */
-  streamType: StreamType;
+export type PeerWarningDetails = PeerDetails & {
   /** The warning that occurred during the peer-to-peer connection. */
   warning: PeerWarning;
 };
 
-/** Represents the details of a tracker error event. */
-export type TrackerErrorDetails = {
+/** Fields common to all tracker event payloads. */
+export type TrackerEventDetails = {
   /** The tracker URL. */
   trackerUrl: string;
   /** The info hash of the swarm that the tracker is for. */
   infoHash: string;
   /** The type of stream that the tracker is for. */
   streamType: StreamType;
+};
+
+/** Represents the details of a tracker error event. */
+export type TrackerErrorDetails = TrackerEventDetails & {
   /** The error that occurred during the tracker request. */
   error: TrackerError;
 };
 
 /** Represents the details of a tracker warning event. */
-export type TrackerWarningDetails = {
-  /** The tracker URL. */
-  trackerUrl: string;
-  /** The info hash of the swarm that the tracker is for. */
-  infoHash: string;
-  /** The type of stream that the tracker is for. */
-  streamType: StreamType;
+export type TrackerWarningDetails = TrackerEventDetails & {
   /** The warning that occurred during the tracker request. */
   warning: TrackerWarning;
 };
 
 /** Represents the types of errors that can occur during the tracker request process. */
 export type TrackerErrorType =
-  | "announce-failed"
-  | "parse-error"
-  | "tracker-response"
-  | "signaling-failed";
+  "announce-failed" | "parse-error" | "tracker-response" | "signaling-failed";
 
 /** Represents an error that occurred during a tracker request. */
 export class TrackerError extends TypedError<TrackerErrorType> {
@@ -862,15 +845,7 @@ export class PeerConnectError extends TypedError<PeerConnectErrorType> {
 }
 
 /** Represents the details of a peer connection error event. */
-export type PeerConnectErrorDetails = {
-  /** The unique identifier for a peer in the network. */
-  peerId: string;
-  /** The info hash of the swarm that the peer is connected to. */
-  infoHash: string;
-  /** The type of stream that the peer is connected to. */
-  streamType: StreamType;
-  /** The tracker URL that the peer was discovered from. */
-  trackerUrl: string;
+export type PeerConnectErrorDetails = PeerDetails & {
   /** The error that occurred during the peer-to-peer connection. */
   error: PeerConnectError;
 };
@@ -1031,15 +1006,11 @@ export type HttpRequestErrorType =
 
 /** Defines the types of errors specific to peer-to-peer requests. */
 export type PeerRequestErrorType =
-  | "peer-segment-absent"
-  | "peer-closed"
-  | "p2p-segment-validation-failed";
+  "peer-segment-absent" | "peer-closed" | "p2p-segment-validation-failed";
 
 /** Enumerates all possible request error types, including HTTP and peer-related errors. */
 export type RequestErrorType =
-  | RequestAbortErrorType
-  | PeerRequestErrorType
-  | HttpRequestErrorType;
+  RequestAbortErrorType | PeerRequestErrorType | HttpRequestErrorType;
 
 /**
  * Represents an error that can occur during the request process, with a timestamp for when the error occurred.

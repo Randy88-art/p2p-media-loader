@@ -293,6 +293,7 @@ export class P2PLoader {
             peerId: peer.id,
             infoHash: this.#stream.infoHash,
             streamType: this.#stream.type,
+            trackerUrl: event.trackerUrl,
             warning,
           });
         },
@@ -350,6 +351,7 @@ export class P2PLoader {
         peerId: event.peerId,
         infoHash: this.#stream.infoHash,
         streamType: this.#stream.type,
+        trackerUrl: event.trackerUrl,
         error: event.error,
       });
     }

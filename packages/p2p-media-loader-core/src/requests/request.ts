@@ -47,15 +47,10 @@ type OmitEncapsulated<T extends RequestAttempt> = Omit<
   "error" | "errorTimestamp"
 >;
 type StartRequestParameters =
-  | OmitEncapsulated<HttpRequestAttempt>
-  | OmitEncapsulated<P2PRequestAttempt>;
+  OmitEncapsulated<HttpRequestAttempt> | OmitEncapsulated<P2PRequestAttempt>;
 
 export type RequestStatus =
-  | "not-started"
-  | "loading"
-  | "succeed"
-  | "failed"
-  | "aborted";
+  "not-started" | "loading" | "succeed" | "failed" | "aborted";
 
 function mapSegmentWithStreamToSegment(segment: SegmentWithStream): Segment {
   return {
