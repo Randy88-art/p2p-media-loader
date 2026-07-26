@@ -5,9 +5,9 @@ import {
   RequestError,
   RequestAbortErrorType,
   RequestErrorType,
-  SegmentWithStream,
   Segment,
 } from "../types.js";
+import { SegmentWithStream } from "../internal-types.js";
 import * as StreamUtils from "../utils/stream.js";
 import * as Utils from "../utils/utils.js";
 import { EventTarget } from "../utils/event-target.js";

@@ -63,10 +63,10 @@ export class SegmentManager {
       details: { url, fragments, live },
     } = data;
 
-    const playlist = this.core.getStream(url);
-    if (!playlist) return;
+    const registeredSegmentIds = this.core.getStreamSegmentRuntimeIds(url);
+    if (!registeredSegmentIds) return;
 
-    const segmentToRemoveIds = new Set(playlist.segments.keys());
+    const segmentToRemoveIds = new Set(registeredSegmentIds);
     const newSegments: Segment[] = [];
     fragments.forEach((fragment, index) => {
       const {
@@ -85,7 +85,7 @@ export class SegmentManager {
       const runtimeId = Utils.getSegmentRuntimeId(responseUrl, byteRange);
       segmentToRemoveIds.delete(runtimeId);
 
-      if (playlist.segments.has(runtimeId)) return;
+      if (registeredSegmentIds.has(runtimeId)) return;
       newSegments.push({
         runtimeId,
         url: responseUrl,

@@ -32,21 +32,6 @@ export type Segment = {
   readonly endTime: number;
 };
 
-/** Extends a Segment with a reference to its associated stream. */
-export type SegmentWithStream<TStream extends Stream = Stream> = Segment & {
-  readonly stream: StreamWithSegments<TStream>;
-};
-
-/**
- * Represents a stream that includes multiple segments, each associated with the stream.
- * The segments map is read-only: it is the core's live registry, managed
- * exclusively through `Core.updateStream`.
- * @template TStream Type of the underlying stream data structure.
- */
-export type StreamWithSegments<TStream extends Stream = Stream> = TStream & {
-  readonly segments: ReadonlyMap<string, SegmentWithStream<TStream>>;
-};
-
 /**
  * Raw stream properties extracted from the manifest's variant or rendition
  * metadata. They define the stream's identity: streams with equal normalized

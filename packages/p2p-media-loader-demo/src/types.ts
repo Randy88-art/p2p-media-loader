@@ -33,7 +33,4 @@ export type PlayerProps = {
   >
 >;
 
-export type PlayerEvents = Omit<
-  PlayerProps,
-  "streamUrl" | "coreOptions"
->;
+export type PlayerEvents = Omit<PlayerProps, "streamUrl" | "coreOptions">;

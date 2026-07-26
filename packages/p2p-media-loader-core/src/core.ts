@@ -7,8 +7,6 @@ import {
   CoreEventMap,
   DynamicCoreConfig,
   EngineCallbacks,
-  StreamWithSegments,
-  SegmentWithStream,
   CommonCoreConfig,
   StreamConfig,
   DefinedCoreConfig,
@@ -16,7 +14,12 @@ import {
   StreamType,
   DynamicStreamConfig,
 } from "./types.js";
-import { BandwidthCalculators, StreamDetails } from "./internal-types.js";
+import {
+  BandwidthCalculators,
+  StreamDetails,
+  StreamWithSegments,
+  SegmentWithStream,
+} from "./internal-types.js";
 import * as StreamUtils from "./utils/stream.js";
 import {
   buildStreamSwarmId,
@@ -307,10 +310,27 @@ export class Core<TStream extends Stream = Stream> {
    * Retrieves a specific stream by its runtime identifier, if it exists.
    *
    * @param streamRuntimeId - The runtime identifier of the stream to retrieve.
-   * @returns The stream with its segments, or `undefined` if not found.
+   * @returns The registered stream with its computed identity, or `undefined` if not found.
    */
-  getStream(streamRuntimeId: string): StreamWithSegments<TStream> | undefined {
+  getStream(streamRuntimeId: string): TStream | undefined {
     return this.streams.get(streamRuntimeId);
+  }
+
+  /**
+   * Retrieves the runtime identifiers of the segments currently registered
+   * for a stream. Player integrations use this to diff a refreshed manifest
+   * against the core's registry before calling `updateStream`.
+   *
+   * @param streamRuntimeId - The runtime identifier of the stream.
+   * @returns A snapshot set of the registered segment runtime IDs, or
+   * `undefined` if the stream is not registered.
+   */
+  getStreamSegmentRuntimeIds(
+    streamRuntimeId: string,
+  ): ReadonlySet<string> | undefined {
+    const stream = this.streams.get(streamRuntimeId);
+    if (!stream) return undefined;
+    return new Set(stream.segments.keys());
   }
 
   /**
@@ -434,23 +454,16 @@ export class Core<TStream extends Stream = Stream> {
     const stream = this.streams.get(streamRuntimeId);
     if (!stream) return;
 
-    // The public type exposes the segments map as ReadonlyMap; the core is
-    // its sole writer.
-    const segments = stream.segments as Map<
-      string,
-      SegmentWithStream<TStream>
-    >;
-
     if (addSegments) {
       for (const segment of addSegments) {
-        if (segments.has(segment.runtimeId)) continue; // should not happen
-        segments.set(segment.runtimeId, { ...segment, stream });
+        if (stream.segments.has(segment.runtimeId)) continue; // should not happen
+        stream.segments.set(segment.runtimeId, { ...segment, stream });
       }
     }
 
     if (removeSegmentIds) {
       for (const id of removeSegmentIds) {
-        segments.delete(id);
+        stream.segments.delete(id);
       }
     }
 

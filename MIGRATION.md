@@ -63,6 +63,7 @@ Registration requires the swarm ID to be resolvable: either configure
 | — (internal `getStreamHash`)                   | `computeInfoHash(streamSwarmId)`                            |
 | `SegmentLoadDetails.segmentUrl` _(deprecated)_ | removed — use `segment.url`                                 |
 | `PartialShakaEngineConfig` (shaka package)     | `PartialShakaP2PEngineConfig`                               |
+| `StreamWithSegments`, `SegmentWithStream`      | removed — internal types (see `Core.getStream` below)       |
 
 The segment event payload types (`SegmentStartDetails`, `SegmentLoadDetails`,
 `SegmentErrorDetails`, `SegmentAbortDetails`) now share the common
@@ -84,15 +85,25 @@ infohash computation.
 - `Core.getStreams()` — returns all currently registered streams with their
   computed identities, so the announced infohashes can be listed at any time,
   not just at registration.
+- `Core.getStreamSegmentRuntimeIds(streamRuntimeId)` — returns a snapshot set
+  of the segment runtime IDs registered for a stream, in registration order.
+  Replaces reading `Core.getStream(...).segments`.
 - `PeerDetails.trackerUrl` — the `onPeerConnect` and `onPeerClose` payloads now
   report the tracker URL the peer was discovered from, matching
   `onPeerConnectError`.
 
+### `Core.getStream` no longer exposes segments
+
+`Core.getStream()` now returns the plain stream (`TStream`) — its identity
+fields plus any integration-specific extensions. The internal segment
+registry (`StreamWithSegments`, `SegmentWithStream`) is no longer part of the
+public API. Code that read `getStream(...).segments` should use
+`Core.getStreamSegmentRuntimeIds(streamRuntimeId)` instead — it covers the
+diffing workflow the segments map was used for (enumeration and membership
+checks of segment runtime IDs).
+
 ### Tightened read-only types
 
-- `StreamWithSegments.segments` (returned by `Core.getStream`) is now typed
-  `ReadonlyMap` — it is the core's live segment registry, managed exclusively
-  through `Core.updateStream`. Mutating it was never supported.
 - `ByteRange.start`/`ByteRange.end` are now `readonly`.
 - `SegmentResponse.data` may reference the buffer the core keeps in segment
   storage for P2P upload: treat it as read-only and copy it (`data.slice(0)`)

@@ -315,8 +315,40 @@ describe("stream registration", () => {
       },
     ]);
 
-    const stream = core.getStream("level-0");
-    expect(stream?.segments.size).toBe(1);
-    expect(stream?.infoHash).toBe(infoHashBefore);
+    expect(core.getStreamSegmentRuntimeIds("level-0")).toEqual(
+      new Set(["segment-1"]),
+    );
+    expect(core.getStream("level-0")?.infoHash).toBe(infoHashBefore);
+  });
+
+  it("exposes registered segment runtime IDs as a detached snapshot", () => {
+    const core = createCore();
+    expect(core.getStreamSegmentRuntimeIds("level-0")).toBeUndefined();
+
+    core.addStreamIfNoneExists({
+      runtimeId: "level-0",
+      type: "main",
+      properties: PROPS_1080P,
+    });
+    expect(core.getStreamSegmentRuntimeIds("level-0")).toEqual(new Set());
+
+    core.updateStream("level-0", [
+      {
+        runtimeId: "segment-1",
+        externalId: 1,
+        url: "https://example.com/hls/segment-1.ts",
+        startTime: 0,
+        endTime: 4,
+      },
+    ]);
+
+    const ids = core.getStreamSegmentRuntimeIds("level-0");
+    expect(ids).toEqual(new Set(["segment-1"]));
+
+    // The snapshot must not reflect (or affect) later registry changes.
+    (ids as Set<string>).add("intruder");
+    expect(core.getStreamSegmentRuntimeIds("level-0")).toEqual(
+      new Set(["segment-1"]),
+    );
   });
 });

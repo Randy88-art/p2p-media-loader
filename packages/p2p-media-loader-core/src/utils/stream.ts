@@ -1,9 +1,9 @@
+import { StreamConfig } from "../types.js";
 import {
+  Playback,
   SegmentWithStream,
-  StreamConfig,
   StreamWithSegments,
-} from "../types.js";
-import { Playback } from "../internal-types.js";
+} from "../internal-types.js";
 import { P2PLoader } from "../p2p/loader.js";
 
 export type SegmentPlaybackStatuses = {

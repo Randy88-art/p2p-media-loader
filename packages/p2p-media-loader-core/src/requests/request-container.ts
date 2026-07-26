@@ -1,5 +1,9 @@
-import { Playback, BandwidthCalculators } from "../internal-types.js";
-import { CoreEventMap, SegmentWithStream, StreamConfig } from "../types.js";
+import {
+  Playback,
+  BandwidthCalculators,
+  SegmentWithStream,
+} from "../internal-types.js";
+import { CoreEventMap, StreamConfig } from "../types.js";
 import { EventTarget } from "../utils/event-target.js";
 import { Request } from "./request.js";
 

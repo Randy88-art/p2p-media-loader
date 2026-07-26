@@ -4,9 +4,9 @@ import {
   CoreEventMap,
   Stream,
   StreamConfig,
-  StreamWithSegments,
   SegmentStorage,
 } from "../index.js";
+import { StreamWithSegments } from "../internal-types.js";
 import { RequestsContainer } from "../requests/request-container.js";
 import * as LoggerUtils from "../utils/logger.js";
 import { EventTarget } from "../utils/event-target.js";

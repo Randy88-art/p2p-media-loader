@@ -4,11 +4,11 @@ import {
   CoreEventMap,
   PeerRequestErrorType,
   RequestError,
-  SegmentWithStream,
   PeerError,
   PeerErrorType,
   PeerWarning,
 } from "../types.js";
+import { SegmentWithStream } from "../internal-types.js";
 import * as Command from "./commands/index.js";
 import { PeerProtocol, PeerConfig } from "./peer-protocol.js";
 import { EventTarget } from "../utils/event-target.js";

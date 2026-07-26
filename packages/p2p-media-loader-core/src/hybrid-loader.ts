@@ -1,15 +1,11 @@
 import { HttpRequestExecutor } from "./http-loader.js";
-import {
-  CoreEventMap,
-  EngineCallbacks,
-  SegmentWithStream,
-  StreamConfig,
-  StreamWithSegments,
-} from "./types.js";
+import { CoreEventMap, EngineCallbacks, StreamConfig } from "./types.js";
 import {
   Playback,
   BandwidthCalculators,
   StreamDetails,
+  SegmentWithStream,
+  StreamWithSegments,
 } from "./internal-types.js";
 import { P2PLoadersContainer } from "./p2p/loaders-container.js";
 import { RequestsContainer } from "./requests/request-container.js";

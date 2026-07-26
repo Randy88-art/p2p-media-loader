@@ -1,11 +1,6 @@
 import type shaka from "shaka-player/dist/shaka-player.compiled.d.ts";
 import * as Utils from "./stream-utils.js";
-import {
-  HookedStream,
-  StreamInfo,
-  Stream,
-  StreamWithReadonlySegments,
-} from "./types.js";
+import { HookedStream, StreamInfo, Stream } from "./types.js";
 import {
   Core,
   Segment,
@@ -49,6 +44,11 @@ export class SegmentManager {
     const stream = this.core.getStream(shakaStream.id.toString());
     if (!stream) return;
 
+    const registeredSegmentIds = this.core.getStreamSegmentRuntimeIds(
+      stream.runtimeId,
+    );
+    if (!registeredSegmentIds) return;
+
     const { segmentIndex } = stream.shakaStream;
     if (!segmentReferences && segmentIndex) {
       try {
@@ -60,17 +60,26 @@ export class SegmentManager {
     if (!segmentReferences) return;
 
     if (this.streamInfo.protocol === "hls") {
-      this.processHlsSegmentReferences(stream, segmentReferences);
+      this.processHlsSegmentReferences(
+        stream,
+        registeredSegmentIds,
+        segmentReferences,
+      );
     } else {
-      this.processDashSegmentReferences(stream, segmentReferences);
+      this.processDashSegmentReferences(
+        stream,
+        registeredSegmentIds,
+        segmentReferences,
+      );
     }
   }
 
   private processDashSegmentReferences(
-    managerStream: StreamWithReadonlySegments,
+    managerStream: Stream,
+    registeredSegmentIds: ReadonlySet<string>,
     segmentReferences: shaka.media.SegmentReference[],
   ) {
-    const staleSegmentsIds = new Set(managerStream.segments.keys());
+    const staleSegmentsIds = new Set(registeredSegmentIds);
     const newSegments: Segment[] = [];
     for (const reference of segmentReferences) {
       const externalId = Math.trunc(
@@ -78,7 +87,7 @@ export class SegmentManager {
       );
 
       const runtimeId = Utils.getSegmentRuntimeIdFromReference(reference);
-      if (!managerStream.segments.has(runtimeId)) {
+      if (!registeredSegmentIds.has(runtimeId)) {
         const segment = Utils.createSegment({
           segmentReference: reference,
           externalId,
@@ -98,14 +107,14 @@ export class SegmentManager {
   }
 
   private processHlsSegmentReferences(
-    managerStream: StreamWithReadonlySegments,
+    managerStream: Stream,
+    registeredSegmentIds: ReadonlySet<string>,
     segmentReferences: shaka.media.SegmentReference[],
   ) {
-    const { segments } = managerStream;
     const lastMediaSequence = Utils.getStreamLastMediaSequence(managerStream);
 
     const newSegments: Segment[] = [];
-    if (segments.size === 0) {
+    if (registeredSegmentIds.size === 0) {
       const firstReferenceMediaSequence =
         lastMediaSequence === undefined
           ? 0
@@ -127,7 +136,7 @@ export class SegmentManager {
 
     for (const reference of itemsBackwards(segmentReferences)) {
       const runtimeId = Utils.getSegmentRuntimeIdFromReference(reference);
-      if (segments.has(runtimeId)) break;
+      if (registeredSegmentIds.has(runtimeId)) break;
       const segment = Utils.createSegment({
         runtimeId,
         segmentReference: reference,
@@ -140,8 +149,17 @@ export class SegmentManager {
 
     const staleSegmentIds: string[] = [];
     const countToDelete = newSegments.length;
-    for (const segment of nSegmentsBackwards(segments, countToDelete)) {
-      staleSegmentIds.push(segment.runtimeId);
+    // Segments register in manifest order and live updates only append at the
+    // tail, so iteration order is chronological and the first N registered IDs
+    // are the oldest segments — the ones that slid out of the live window.
+    // Playback position never affects registration: the hooked segmentIndex
+    // always reports the full window, and seeking within it is deduplicated
+    // upstream. (If a refresh shares no segments with the registry — e.g.
+    // after a very long stall — this deletes only as many old segments as
+    // arrived, matching the pre-v4 behavior.)
+    for (const runtimeId of registeredSegmentIds) {
+      if (staleSegmentIds.length >= countToDelete) break;
+      staleSegmentIds.push(runtimeId);
     }
 
     if (!newSegments.length && !staleSegmentIds.length) return;
@@ -155,16 +173,4 @@ export class SegmentManager {
 
 function* itemsBackwards<T>(items: T[]) {
   for (let i = items.length - 1; i >= 0; i--) yield items[i];
-}
-
-function* nSegmentsBackwards(
-  segments: ReadonlyMap<string, Segment>,
-  count: number,
-) {
-  let i = 0;
-  for (const segment of segments.values()) {
-    if (i >= count) break;
-    yield segment;
-    i++;
-  }
 }

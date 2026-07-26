@@ -1,11 +1,6 @@
 import { Peer } from "./peer.js";
-import {
-  CoreEventMap,
-  PeerError,
-  SegmentWithStream,
-  StreamConfig,
-  StreamWithSegments,
-} from "../types.js";
+import { CoreEventMap, PeerError, StreamConfig } from "../types.js";
+import { SegmentWithStream, StreamWithSegments } from "../internal-types.js";
 import { RequestsContainer } from "../requests/request-container.js";
 import { WebTorrentManager } from "../webtorrent/webtorrent-manager/index.js";
 import { WebTorrentSocketPool } from "../webtorrent/webtorrent-socket-pool/index.js";
