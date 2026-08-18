@@ -66,15 +66,29 @@ describe("stream registration", () => {
     );
   });
 
-  it("throws when neither swarmId nor manifest response URL is set", () => {
+  it("fails registration when neither swarmId nor manifest response URL is set", () => {
     const core = new Core();
+    const onRegistrationError = vi.fn();
+    core.addEventListener("onStreamRegistrationError", onRegistrationError);
+
     expect(() =>
       core.addStreamIfNoneExists({
         runtimeId: "level-0",
         type: "main",
         properties: PROPS_1080P,
       }),
-    ).toThrow(/manifest response URL is not set/);
+    ).not.toThrow();
+
+    expect(core.getStream("level-0")).toBeUndefined();
+    expect(onRegistrationError).toHaveBeenCalledTimes(1);
+    const details = onRegistrationError.mock.calls[0][0] as {
+      runtimeId: string;
+      streamType: string;
+      error: Error;
+    };
+    expect(details.runtimeId).toBe("level-0");
+    expect(details.streamType).toBe("main");
+    expect(details.error.message).toMatch(/manifest response URL is not set/);
   });
 
   it("uses the streamSwarmIdBuilder output verbatim", () => {
@@ -135,72 +149,83 @@ describe("stream registration", () => {
     expect(core.getStream("level-0")?.infoHash).toBe("aEnMPupzZeID9k+gkk5Y");
   });
 
-  it("throws when the builder returns an empty or non-string value", () => {
-    const emptyCore = createCore({ streamSwarmIdBuilder: () => "" });
-    expect(() =>
-      emptyCore.addStreamIfNoneExists({
-        runtimeId: "level-0",
-        type: "main",
-        properties: PROPS_1080P,
-      }),
-    ).toThrow(/non-empty string/);
+  it("fails registration when the builder returns an empty or non-string value", () => {
+    for (const builderResult of ["", 42 as unknown as string]) {
+      const core = createCore({ streamSwarmIdBuilder: () => builderResult });
+      const onRegistrationError = vi.fn();
+      core.addEventListener("onStreamRegistrationError", onRegistrationError);
 
-    const nonStringCore = createCore({
-      streamSwarmIdBuilder: () => 42 as unknown as string,
-    });
-    expect(() =>
-      nonStringCore.addStreamIfNoneExists({
+      core.addStreamIfNoneExists({
         runtimeId: "level-0",
         type: "main",
         properties: PROPS_1080P,
-      }),
-    ).toThrow(/non-empty string/);
+      });
+
+      expect(core.getStream("level-0")).toBeUndefined();
+      expect(onRegistrationError).toHaveBeenCalledTimes(1);
+      const { error } = onRegistrationError.mock.calls[0][0] as {
+        error: Error;
+      };
+      expect(error.message).toMatch(/non-empty string/);
+    }
   });
 
-  it("throws when different stream identities collide on one stream swarm ID", () => {
+  it("fails registration when different stream identities collide on one stream swarm ID", () => {
     const core = createCore({ streamSwarmIdBuilder: () => "same-key" });
     const onStreamAdded = vi.fn();
+    const onRegistrationError = vi.fn();
     core.addEventListener("onStreamAdded", onStreamAdded);
+    core.addEventListener("onStreamRegistrationError", onRegistrationError);
     core.addStreamIfNoneExists({
       runtimeId: "level-0",
       type: "main",
       properties: PROPS_1080P,
     });
 
-    expect(() =>
-      core.addStreamIfNoneExists({
-        runtimeId: "level-1",
-        type: "main",
-        properties: PROPS_360P,
-      }),
-    ).toThrow(/same stream swarm ID/);
+    core.addStreamIfNoneExists({
+      runtimeId: "level-1",
+      type: "main",
+      properties: PROPS_360P,
+    });
 
     // A failed registration must not leave partial state behind.
     expect(core.getStream("level-1")).toBeUndefined();
     expect(core.getStream("level-0")).toBeDefined();
     expect(onStreamAdded).toHaveBeenCalledTimes(1);
+    expect(onRegistrationError).toHaveBeenCalledTimes(1);
+    const { runtimeId, error } = onRegistrationError.mock.calls[0][0] as {
+      runtimeId: string;
+      error: Error;
+    };
+    expect(runtimeId).toBe("level-1");
+    expect(error.message).toMatch(/same stream swarm ID/);
   });
 
-  it("throws when a builder collapses different stream types onto one ID", () => {
+  it("fails registration when a builder collapses different stream types onto one ID", () => {
     // A builder that ignores streamType merges a main and a secondary stream
     // that happen to share an identityHash (both have blanked/{bitrate:0}
     // metadata) into one swarm — peers would then swap audio/video segments.
     const core = createCore({
       streamSwarmIdBuilder: ({ properties }) => `k-${properties.bitrate ?? 0}`,
     });
+    const onRegistrationError = vi.fn();
+    core.addEventListener("onStreamRegistrationError", onRegistrationError);
     core.addStreamIfNoneExists({
       runtimeId: "video",
       type: "main",
       properties: { bitrate: 0 },
     });
 
-    expect(() =>
-      core.addStreamIfNoneExists({
-        runtimeId: "audio",
-        type: "secondary",
-        properties: { bitrate: 0 },
-      }),
-    ).toThrow(/different identities/);
+    core.addStreamIfNoneExists({
+      runtimeId: "audio",
+      type: "secondary",
+      properties: { bitrate: 0 },
+    });
+
+    expect(core.getStream("audio")).toBeUndefined();
+    expect(onRegistrationError).toHaveBeenCalledTimes(1);
+    const { error } = onRegistrationError.mock.calls[0][0] as { error: Error };
+    expect(error.message).toMatch(/different identities/);
   });
 
   it("allows identical identities under different runtime IDs to share a swarm", () => {

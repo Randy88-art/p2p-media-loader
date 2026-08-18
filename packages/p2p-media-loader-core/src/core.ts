@@ -11,6 +11,7 @@ import {
   StreamConfig,
   DefinedCoreConfig,
   StreamRegistration,
+  StreamProperties,
   StreamType,
   DynamicStreamConfig,
 } from "./types.js";
@@ -372,11 +373,34 @@ export class Core<TStream extends Stream = Stream> {
    * Requires the swarm ID to be resolvable: either a `swarmId` is configured
    * or `setManifestResponseUrl()` has been called.
    *
+   * Never throws: a stream that fails to register (unresolvable swarm ID, or
+   * an invalid or colliding custom stream swarm ID) stays unknown to the core —
+   * its segments load through the player's default path without P2P — and the
+   * failure is reported via the `onStreamRegistrationError` event.
+   *
    * @param stream - The stream to potentially add to the map.
    */
   addStreamIfNoneExists(stream: StreamRegistration<TStream>): void {
     if (this.streams.has(stream.runtimeId)) return;
 
+    const properties = Object.freeze({ ...stream.properties });
+    try {
+      this.registerStream(stream, properties);
+    } catch (error) {
+      this.logger("failed to register stream %s: %O", stream.runtimeId, error);
+      this.eventTarget.dispatchEvent("onStreamRegistrationError", {
+        runtimeId: stream.runtimeId,
+        streamType: stream.type,
+        properties,
+        error: error instanceof Error ? error : new Error(String(error)),
+      });
+    }
+  }
+
+  private registerStream(
+    stream: StreamRegistration<TStream>,
+    properties: Readonly<StreamProperties>,
+  ): void {
     const config =
       stream.type === "main"
         ? this.mainStreamConfig
@@ -389,7 +413,6 @@ export class Core<TStream extends Stream = Stream> {
       );
     }
 
-    const properties = Object.freeze({ ...stream.properties });
     const identityHash = computeStreamIdentityHash(properties);
 
     let streamSwarmId = buildStreamSwarmId(swarmId, stream.type, identityHash);

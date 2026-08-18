@@ -93,15 +93,15 @@ export class ManifestParserDecorator implements shaka.extern.ManifestParser {
       type: StreamType,
       properties: StreamProperties,
     ) => {
-      // Isolate per-stream registration failures: this method runs inside
-      // the Shaka manifest parser, so a throw would abort manifest loading.
-      // A stream that fails to register stays unknown to the core and its
-      // segments load through the default fetch plugin without P2P.
+      // Stream registration never throws — the core reports failures via its
+      // onStreamRegistrationError event. This guard isolates unexpected
+      // segment-index hooking errors, which would otherwise abort Shaka's
+      // manifest loading.
       try {
         this.hookSegmentIndex(stream);
         segmentManager.setStream(stream, type, properties);
       } catch (error) {
-        this.debug(`failed to register stream ${stream.id}:`, error);
+        this.debug(`failed to hook stream ${stream.id}:`, error);
       }
       processedStreams.add(stream.id);
       return true;

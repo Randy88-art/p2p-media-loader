@@ -20,7 +20,7 @@ const makeLevel = (url: string, bitrate: number, height: number) =>
 describe("hls.js segment manager stream registration", () => {
   it("isolates per-stream registration failures", () => {
     // A collision-prone builder keyed on height only: two 1080p rungs with
-    // different bitrates collide, which makes the core throw on the second.
+    // different bitrates collide, which makes the core reject the second.
     const core = new Core({
       streamSwarmIdBuilder: ({ swarmId, streamType, properties }) =>
         `k-${swarmId}-${streamType}-${properties.height ?? 0}`,

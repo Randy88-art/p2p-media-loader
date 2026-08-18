@@ -52,6 +52,11 @@ core.addStreamIfNoneExists({
 Registration requires the swarm ID to be resolvable: either configure
 `swarmId` or call `setManifestResponseUrl()` before adding streams.
 
+`addStreamIfNoneExists` never throws. A stream that fails to register — an
+unresolvable swarm ID, or an invalid or colliding custom stream swarm ID —
+stays unknown to the core (its segments load without P2P), and the failure is
+reported via the `onStreamRegistrationError` event.
+
 ### Renamed / removed exports
 
 | v3                                            | v4                                                          |
@@ -85,6 +90,10 @@ should load it with a dynamic `import()` (or `require()` on Node.js 20.17+).
 - `onStreamAdded` core event — fired once per registered stream with its
   computed identity, including `infoHash`. The payload is a snapshot detached
   from the core's internal stream state.
+- `onStreamRegistrationError` core event — fired when a stream fails to
+  register. Subscribe to surface `streamSwarmIdBuilder` misconfigurations
+  (e.g. colliding stream swarm IDs), which are otherwise only visible in
+  debug logs.
 - `Core.getStreams()` — returns all currently registered streams with their
   computed identities, so the announced infohashes can be listed at any time,
   not just at registration.

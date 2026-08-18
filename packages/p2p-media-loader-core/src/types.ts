@@ -477,7 +477,8 @@ export type StreamConfig = {
    * The function must be deterministic and identical across all peers of the
    * swarm, and every distinct stream must map to a distinct ID: peers whose
    * streams resolve to the same infohash exchange segments with each other, and
-   * registering two different streams with the same ID throws. Include enough
+   * registering two different streams with the same ID fails the registration
+   * (reported via the `onStreamRegistrationError` event). Include enough
    * properties to guarantee uniqueness — resolution alone collides on ladders
    * with several bitrates at the same resolution. If in doubt, incorporate the
    * `identityHash` from the context (reproduce it server-side with
@@ -850,6 +851,21 @@ export type PeerConnectErrorDetails = PeerDetails & {
   error: PeerConnectError;
 };
 
+/** Represents the details of a stream registration failure. */
+export type StreamRegistrationErrorDetails = {
+  /** Runtime identifier of the stream that failed to register. */
+  runtimeId: string;
+
+  /** Stream type. */
+  streamType: StreamType;
+
+  /** Raw stream properties the integration passed for the stream. */
+  properties: Readonly<StreamProperties>;
+
+  /** The error that caused the registration to fail. */
+  error: Error;
+};
+
 /** Represents the details about a registered stream. */
 export type StreamAddedDetails<TStream extends Stream = Stream> = {
   /**
@@ -879,6 +895,20 @@ export type CoreEventMap = {
    * @param params - Contains the registered stream.
    */
   onStreamAdded: (params: StreamAddedDetails) => void;
+
+  /**
+   * Invoked when a stream fails to register in the Core: the swarm ID is
+   * unresolvable, or a custom `streamSwarmIdBuilder` returned an invalid or
+   * colliding stream swarm ID. The stream stays unknown to the core — its
+   * segments load through the player's default path without P2P; other
+   * streams are unaffected.
+   *
+   * Subscribe to surface `streamSwarmIdBuilder` misconfigurations: without a
+   * listener the failure is only visible in debug logs.
+   *
+   * @param params - Contains the failed registration and the error.
+   */
+  onStreamRegistrationError: (params: StreamRegistrationErrorDetails) => void;
 
   /**
    * Invoked when a segment is fully downloaded and available for use.
