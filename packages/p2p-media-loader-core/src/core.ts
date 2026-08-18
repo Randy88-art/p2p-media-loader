@@ -493,13 +493,9 @@ export class Core<TStream extends Stream = Stream> {
    *
    * @param segmentRuntimeId - The runtime identifier of the segment to load.
    * @param callbacks - The callbacks to be invoked during segment loading.
-   * @throws {Error} - Throws if the manifest response URL is not defined.
+   * @throws {Error} - Throws if the segment is not registered in any stream.
    */
   async loadSegment(segmentRuntimeId: string, callbacks: EngineCallbacks) {
-    if (!this.manifestResponseUrl) {
-      throw new Error("Manifest response url is not defined");
-    }
-
     await this.initializeSegmentStorage();
 
     const segment = this.identifySegment(segmentRuntimeId);
@@ -659,10 +655,6 @@ export class Core<TStream extends Stream = Stream> {
   }
 
   private identifySegment(segmentRuntimeId: string): SegmentWithStream {
-    if (!this.manifestResponseUrl) {
-      throw new Error("Manifest response url is undefined");
-    }
-
     const segment = StreamUtils.getSegmentFromStreamsMap(
       this.streams,
       segmentRuntimeId,

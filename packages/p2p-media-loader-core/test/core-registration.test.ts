@@ -296,6 +296,29 @@ describe("stream registration", () => {
     expect(core.getStreams()).toEqual([]);
   });
 
+  it("supports the swarmId-only configuration end to end", () => {
+    // Documented in MIGRATION.md: a custom integration may configure swarmId
+    // instead of calling setManifestResponseUrl(). Segments of streams
+    // registered that way must be loadable.
+    const core = new Core({ swarmId: "my-swarm" });
+    core.addStreamIfNoneExists({
+      runtimeId: "level-0",
+      type: "main",
+      properties: PROPS_1080P,
+    });
+    core.updateStream("level-0", [
+      {
+        runtimeId: "segment-1",
+        externalId: 1,
+        url: "https://example.com/hls/segment-1.ts",
+        startTime: 0,
+        endTime: 4,
+      },
+    ]);
+
+    expect(core.isSegmentLoadable("segment-1")).toBe(true);
+  });
+
   it("returns detached snapshots from getStream and getStreams", () => {
     const core = createCore();
     core.addStreamIfNoneExists({
