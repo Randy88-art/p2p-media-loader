@@ -310,10 +310,13 @@ export class Core<TStream extends Stream = Stream> {
    * Retrieves a specific stream by its runtime identifier, if it exists.
    *
    * @param streamRuntimeId - The runtime identifier of the stream to retrieve.
-   * @returns The registered stream with its computed identity, or `undefined` if not found.
+   * @returns A detached snapshot of the registered stream with its computed
+   * identity, or `undefined` if not found. The identity fields never change
+   * after registration, so the snapshot stays accurate for the stream's lifetime.
    */
   getStream(streamRuntimeId: string): TStream | undefined {
-    return this.streams.get(streamRuntimeId);
+    const stream = this.streams.get(streamRuntimeId);
+    return stream && this.toStreamSnapshot(stream);
   }
 
   /**
@@ -339,10 +342,26 @@ export class Core<TStream extends Stream = Stream> {
    * event, this reflects the full set at any moment, so late subscribers can
    * catch up on streams registered before they attached.
    *
-   * @returns The registered streams, in registration order.
+   * @returns Detached snapshots of the registered streams, in registration order.
    */
   getStreams(): TStream[] {
-    return [...this.streams.values()];
+    return Array.from(this.streams.values(), (stream) =>
+      this.toStreamSnapshot(stream),
+    );
+  }
+
+  /**
+   * Builds a detached snapshot of a registered stream: its identity and
+   * integration-specific fields without the internal segments registry.
+   * Everything the core hands out — event payloads and getters — is a
+   * snapshot, so consumers can never reach or retain core state.
+   */
+  private toStreamSnapshot(stream: StreamWithSegments<TStream>): TStream {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { segments, ...snapshot } = stream;
+    // TypeScript cannot prove that removing the segments registry from
+    // StreamWithSegments<TStream> reconstructs TStream for an arbitrary subtype.
+    return snapshot as unknown as TStream;
   }
 
   /**
@@ -431,12 +450,8 @@ export class Core<TStream extends Stream = Stream> {
 
     this.streams.set(stream.runtimeId, registeredStream);
 
-    // Dispatch a snapshot without the internal segments map, so listeners
-    // cannot reach into core state.
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { segments, ...streamSnapshot } = registeredStream;
     this.eventTarget.dispatchEvent("onStreamAdded", {
-      stream: streamSnapshot,
+      stream: this.toStreamSnapshot(registeredStream),
     });
   }
 

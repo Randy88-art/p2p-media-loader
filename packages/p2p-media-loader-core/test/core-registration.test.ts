@@ -286,7 +286,7 @@ describe("stream registration", () => {
 
     const streams = core.getStreams();
     expect(streams.map((s) => s.runtimeId)).toEqual(["level-0", "level-1"]);
-    expect(streams[0]).toBe(core.getStream("level-0"));
+    expect(streams[0]).toEqual(core.getStream("level-0"));
     expect(streams.map((s) => s.infoHash)).toEqual([
       core.getStream("level-0")?.infoHash,
       core.getStream("level-1")?.infoHash,
@@ -294,6 +294,28 @@ describe("stream registration", () => {
 
     core.destroy();
     expect(core.getStreams()).toEqual([]);
+  });
+
+  it("returns detached snapshots from getStream and getStreams", () => {
+    const core = createCore();
+    core.addStreamIfNoneExists({
+      runtimeId: "level-0",
+      type: "main",
+      properties: PROPS_1080P,
+    });
+
+    const fromGetStream = core.getStream("level-0");
+    const fromGetStreams = core.getStreams()[0];
+
+    // No path into the core's internal segment registry.
+    expect(fromGetStream && "segments" in fromGetStream).toBe(false);
+    expect("segments" in fromGetStreams).toBe(false);
+
+    // A fresh snapshot per call: equal by value, not shared by reference.
+    expect(fromGetStream).not.toBe(core.getStream("level-0"));
+    expect(fromGetStream).toEqual(core.getStream("level-0"));
+    expect(fromGetStreams).not.toBe(fromGetStream);
+    expect(fromGetStreams).toEqual(fromGetStream);
   });
 
   it("keeps identity fields stable across segment updates", () => {

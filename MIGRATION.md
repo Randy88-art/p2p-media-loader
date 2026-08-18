@@ -97,10 +97,12 @@ should load it with a dynamic `import()` (or `require()` on Node.js 20.17+).
 
 ### `Core.getStream` no longer exposes segments
 
-`Core.getStream()` now returns the plain stream (`TStream`) — its identity
-fields plus any integration-specific extensions. The internal segment
-registry (`StreamWithSegments`, `SegmentWithStream`) is no longer part of the
-public API. Code that read `getStream(...).segments` should use
+`Core.getStream()` and `Core.getStreams()` now return detached snapshots of
+the plain stream (`TStream`) — its identity fields plus any
+integration-specific extensions. The internal segment registry
+(`StreamWithSegments`, `SegmentWithStream`) is no longer part of the public
+API, and no core output (event payload or getter) shares live internal
+objects. Code that read `getStream(...).segments` should use
 `Core.getStreamSegmentRuntimeIds(streamRuntimeId)` instead — it covers the
 diffing workflow the segments map was used for (enumeration and membership
 checks of segment runtime IDs).
