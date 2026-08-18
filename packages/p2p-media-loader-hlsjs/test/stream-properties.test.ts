@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import type { LevelParsed, ManifestLoadedData } from "hls.js";
 import {
   computeStreamIdentityHash,
   StreamProperties,
@@ -8,6 +7,7 @@ import {
   getAudioStreamProperties,
   getVideoStreamProperties,
 } from "../src/stream-properties.js";
+import { makeAudioTrack, makeLevel, type ParsedLevel } from "./test-utils.js";
 
 // Cross-player parity: the shaka package pins its extractors to the SAME
 // canonical properties and golden hashes
@@ -29,15 +29,6 @@ const CANONICAL_1080P: StreamProperties = {
 // p2p-media-loader-core/test/stream-identity.test.ts.
 const MISSING_METADATA_IDENTITY_HASH = "UYnLxGhQilEV4D0HbCx+kRv0ZF0=";
 const AUDIO_TRACK_IDENTITY_HASH = "bdjQ1B4N2yrcTDHyU5j7iDGV9sY=";
-
-type ParsedLevel = LevelParsed & { maxBitrate?: number };
-
-const makeLevel = (overrides: Partial<ParsedLevel>): ParsedLevel =>
-  ({ attrs: {}, ...overrides }) as ParsedLevel;
-
-const makeAudioTrack = (
-  overrides: Partial<ManifestLoadedData["audioTracks"][number]>,
-) => overrides as ManifestLoadedData["audioTracks"][number];
 
 describe("hls.js stream properties extraction", () => {
   it("extracts a 1080p video level to the canonical identity", () => {

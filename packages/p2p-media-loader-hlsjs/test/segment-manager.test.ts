@@ -2,18 +2,20 @@ import { describe, expect, it } from "vitest";
 import type { ManifestLoadedData } from "hls.js";
 import { Core } from "p2p-media-loader-core";
 import { SegmentManager } from "../src/segment-manager.js";
+import { makeLevel as makeLevelFixture } from "./test-utils.js";
 
 const MANIFEST_URL = "https://example.com/hls/master.m3u8";
 
+// Positional convenience wrapper over the shared fixture builder: these tests
+// only vary the fields that make stream identities (and runtime IDs) distinct.
 const makeLevel = (url: string, bitrate: number, height: number) =>
-  ({
+  makeLevelFixture({
     url,
     bitrate,
     videoCodec: "avc1.64002a",
     width: Math.round((height * 16) / 9),
     height,
-    attrs: {},
-  }) as unknown as ManifestLoadedData["levels"][number];
+  });
 
 describe("hls.js segment manager stream registration", () => {
   it("isolates per-stream registration failures", () => {
