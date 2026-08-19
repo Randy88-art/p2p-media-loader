@@ -34,7 +34,7 @@ export type ShakaP2PEngineConfig = {
 };
 
 /** Allows for partial configuration settings for the `ShakaP2PEngine`. */
-export type PartialShakaEngineConfig = Partial<
+export type PartialShakaP2PEngineConfig = Partial<
   Omit<ShakaP2PEngineConfig, "core">
 > & {
   /** Partial core config */
@@ -86,7 +86,7 @@ export class ShakaP2PEngine {
    * @param config An optional configuration for customizing the P2P engine's behavior.
    * @param shaka The Shaka Player library instance.
    */
-  constructor(config?: PartialShakaEngineConfig, shaka = window.shaka) {
+  constructor(config?: PartialShakaP2PEngineConfig, shaka = window.shaka) {
     validateShaka(shaka);
 
     this.shaka = shaka;

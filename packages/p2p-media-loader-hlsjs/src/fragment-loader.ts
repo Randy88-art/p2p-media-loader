@@ -91,13 +91,13 @@ export class FragmentLoaderBase implements Loader<FragmentLoaderContext> {
       const engineData = this.#response.data.slice(0);
 
       if (this.#callbacks.onProgress) {
-        this.#callbacks.onProgress(this.stats, context, engineData, undefined);
+        this.#callbacks.onProgress(this.stats, context, engineData, null);
       }
       this.#callbacks.onSuccess(
         { data: engineData, url: context.url },
         this.stats,
         context,
-        undefined,
+        null,
       );
     };
 
@@ -141,7 +141,7 @@ export class FragmentLoaderBase implements Loader<FragmentLoaderContext> {
       this.#defaultLoader.abort();
     } else {
       this.#abortInternal();
-      this.#callbacks?.onAbort?.(this.stats, this.context, {});
+      this.#callbacks?.onAbort?.(this.stats, this.context, null);
     }
   }
 

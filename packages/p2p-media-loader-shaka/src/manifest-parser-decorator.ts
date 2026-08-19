@@ -6,13 +6,11 @@ import {
   HookedNetworkingEngine,
   P2PMLShakaData,
 } from "./types.js";
+import { StreamProperties, StreamType, debug } from "p2p-media-loader-core";
 import {
-  StreamType,
-  debug,
-  generateStreamShortId,
-} from "p2p-media-loader-core";
-
-const AUDIO_CODECS = ["mp4a", "ac-3", "ec-3", "ec+3", "opus", "vorb", "flac"];
+  getAudioStreamProperties,
+  getVideoStreamProperties,
+} from "./stream-properties.js";
 
 export class ManifestParserDecorator implements shaka.extern.ManifestParser {
   private readonly debug = debug("p2pml-shaka:manifest-parser");
@@ -93,10 +91,18 @@ export class ManifestParserDecorator implements shaka.extern.ManifestParser {
     const processStream = (
       stream: shaka.extern.Stream,
       type: StreamType,
-      index: string,
+      properties: StreamProperties,
     ) => {
-      this.hookSegmentIndex(stream);
-      segmentManager.setStream(stream, type, index);
+      // Stream registration never throws — the core reports failures via its
+      // onStreamRegistrationError event. This guard isolates unexpected
+      // segment-index hooking errors, which would otherwise abort Shaka's
+      // manifest loading.
+      try {
+        this.hookSegmentIndex(stream);
+        segmentManager.setStream(stream, type, properties);
+      } catch (error) {
+        this.debug(`failed to hook stream ${stream.id}:`, error);
+      }
       processedStreams.add(stream.id);
       return true;
     };
@@ -105,43 +111,15 @@ export class ManifestParserDecorator implements shaka.extern.ManifestParser {
       const { video, audio } = variant;
 
       if (video && !processedStreams.has(video.id)) {
-        const isMissingMetadata = variant.bandwidth === 0;
-        // In muxed streams, Shaka natively includes audio codecs in the video codec array.
-        // We strip standard audio prefixes here to strictly match HLS.js's cleanly separated
-        // videoCodec parsing, ensuring peers on identical video tracks share P2P segments
-        // regardless of differently selected audio track descriptors.
-        const videoCodecs = video.codecs
-          ? video.codecs
-              .split(",")
-              .map((c) => c.trim().toLowerCase())
-              .filter((c) => !AUDIO_CODECS.some((p) => c.startsWith(p)))
-              .join(",")
-          : undefined;
-
-        const { frameRate, hdr: videoRange } = video;
-
-        const index = generateStreamShortId({
-          bitrate: variant.bandwidth,
-          codecs: isMissingMetadata ? undefined : videoCodecs,
-          width: isMissingMetadata ? undefined : video.width,
-          height: isMissingMetadata ? undefined : video.height,
-          frameRate: isMissingMetadata ? undefined : frameRate,
-          videoRange: isMissingMetadata ? undefined : videoRange,
-        });
-        processStream(video, "main", index);
+        processStream(video, "main", getVideoStreamProperties(variant, video));
       }
       if (audio && !processedStreams.has(audio.id)) {
         const isMain = !video; // audio-only master playlist variants
-        const name = audio.label ?? audio.originalId ?? undefined;
-
-        const index = generateStreamShortId({
-          bitrate: isMain ? variant.bandwidth : 0,
-          codecs: isMain ? undefined : audio.codecs,
-          language: isMain ? undefined : audio.language,
-          channels: isMain ? undefined : audio.channelsCount,
-          name: isMain ? undefined : name,
-        });
-        processStream(audio, isMain ? "main" : "secondary", index);
+        processStream(
+          audio,
+          isMain ? "main" : "secondary",
+          getAudioStreamProperties(variant, audio, isMain),
+        );
       }
     }
   }

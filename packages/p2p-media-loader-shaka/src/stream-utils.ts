@@ -1,5 +1,5 @@
 import type shaka from "shaka-player/dist/shaka-player.compiled.d.ts";
-import { StreamWithReadonlySegments } from "./types.js";
+import { Stream } from "./types.js";
 import { Segment, ByteRange } from "p2p-media-loader-core";
 
 export function createSegment({
@@ -77,7 +77,7 @@ export function getSegmentInfoFromReference(
   };
 }
 
-export function getStreamLastMediaSequence(stream: StreamWithReadonlySegments) {
+export function getStreamLastMediaSequence(stream: Stream) {
   const { shakaStream } = stream;
   const map = shakaStream.mediaSequenceTimeMap;
   if (!map) return;

@@ -1,6 +1,6 @@
 {
   "name": "p2p-media-loader-hlsjs",
-  "version": "3.0.0",
+  "version": "4.0.0",
   "description": "P2P Media Loader hls.js integration",
   "license": "Apache-2.0",
   "author": "Novage",
@@ -49,12 +49,14 @@
     "prettier": "prettier --write .",
     "lint": "eslint src --report-unused-disable-directives --max-warnings 0 --flag unstable_native_nodejs_ts_config",
     "clean:build": "rimraf lib dist build p2p-media-loader-hlsjs-*.tgz",
-    "type-check": "npx tsc --noEmit"
+    "type-check": "npx tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "p2p-media-loader-core": "workspace:*"
   },
   "devDependencies": {
-    "hls.js": "^1.6.16"
+    "hls.js": "^1.7.0",
+    "vitest": "^4.1.10"
   }
 }

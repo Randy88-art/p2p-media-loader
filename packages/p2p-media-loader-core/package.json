@@ -26,19 +26,27 @@
     "ecdn",
     "cdn"
   ],
-  "version": "3.0.0",
+  "version": "4.0.0",
   "files": [
     "dist",
     "lib",
     "src"
   ],
-  "exports": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./server": "./src/server.ts"
+  },
   "types": "./src/index.ts",
   "publishConfig": {
     "exports": {
       ".": {
+        "types": "./lib/index.d.ts",
         "p2pml:core-as-bundle": "./dist/p2p-media-loader-core.es.js",
         "import": "./lib/index.js"
+      },
+      "./server": {
+        "types": "./lib/server.d.ts",
+        "import": "./lib/server.js"
       }
     },
     "types": "./lib/index.d.ts"
@@ -62,6 +70,6 @@
     "debug": "^4.4.3"
   },
   "devDependencies": {
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.10"
   }
 }

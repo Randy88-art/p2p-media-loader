@@ -10,7 +10,7 @@ import {
 
 type SegmentDataItem = {
   segmentId: number;
-  streamId: string;
+  streamSwarmId: string;
   data: ArrayBuffer;
   startTime: number;
   endTime: number;
@@ -23,7 +23,7 @@ type Playback = {
 };
 
 type LastRequestedSegmentInfo = {
-  streamId: string;
+  streamSwarmId: string;
   segmentId: number;
   startTime: number;
   endTime: number;
@@ -46,7 +46,7 @@ export class SegmentMemoryStorage implements SegmentStorage {
   private secondaryStreamConfig?: StreamConfig;
   private currentPlayback?: Playback;
   private lastRequestedSegment?: LastRequestedSegmentInfo;
-  private segmentChangeCallback?: (streamId: string) => void;
+  private segmentChangeCallback?: (streamSwarmId: string) => void;
 
   constructor() {
     this.logger = debug("p2pml-core:segment-memory-storage");
@@ -73,7 +73,7 @@ export class SegmentMemoryStorage implements SegmentStorage {
 
   onSegmentRequested(
     swarmId: string,
-    streamId: string,
+    streamSwarmId: string,
     segmentId: number,
     startTime: number,
     endTime: number,
@@ -81,7 +81,7 @@ export class SegmentMemoryStorage implements SegmentStorage {
     isLiveStream: boolean,
   ): void {
     this.lastRequestedSegment = {
-      streamId,
+      streamSwarmId,
       segmentId,
       startTime,
       endTime,
@@ -94,7 +94,7 @@ export class SegmentMemoryStorage implements SegmentStorage {
   // eslint-disable-next-line @typescript-eslint/require-await
   async storeSegment(
     _swarmId: string,
-    streamId: string,
+    streamSwarmId: string,
     segmentId: number,
     data: ArrayBuffer,
     startTime: number,
@@ -104,29 +104,33 @@ export class SegmentMemoryStorage implements SegmentStorage {
   ) {
     this.clear(isLiveStream, data.byteLength);
 
-    const storageId = getStorageItemId(streamId, segmentId);
+    const storageId = getStorageItemId(streamSwarmId, segmentId);
     this.cache.set(storageId, {
       data,
       segmentId,
-      streamId,
+      streamSwarmId,
       startTime,
       endTime,
       streamType,
     });
     this.increaseStorageUsage(data.byteLength);
 
-    this.logger(`add segment: ${segmentId} to ${streamId}`);
+    this.logger(`add segment: ${segmentId} to ${streamSwarmId}`);
 
     if (!this.segmentChangeCallback) {
       throw new Error("dispatchStorageUpdatedEvent is not set");
     }
 
-    this.segmentChangeCallback(streamId);
+    this.segmentChangeCallback(streamSwarmId);
   }
 
   // eslint-disable-next-line @typescript-eslint/require-await
-  async getSegmentData(_swarmId: string, streamId: string, segmentId: number) {
-    const segmentStorageId = getStorageItemId(streamId, segmentId);
+  async getSegmentData(
+    _swarmId: string,
+    streamSwarmId: string,
+    segmentId: number,
+  ) {
+    const segmentStorageId = getStorageItemId(streamSwarmId, segmentId);
     const dataItem = this.cache.get(segmentStorageId);
 
     if (dataItem === undefined) return undefined;
@@ -156,18 +160,21 @@ export class SegmentMemoryStorage implements SegmentStorage {
     };
   }
 
-  hasSegment(_swarmId: string, streamId: string, externalId: number) {
-    const segmentStorageId = getStorageItemId(streamId, externalId);
+  hasSegment(_swarmId: string, streamSwarmId: string, externalId: number) {
+    const segmentStorageId = getStorageItemId(streamSwarmId, externalId);
     const segment = this.cache.get(segmentStorageId);
 
     return segment !== undefined;
   }
 
-  getStoredSegmentIds(_swarmId: string, streamId: string) {
+  getStoredSegmentIds(_swarmId: string, streamSwarmId: string) {
     const externalIds: number[] = [];
 
-    for (const { segmentId, streamId: streamCacheId } of this.cache.values()) {
-      if (streamCacheId !== streamId) continue;
+    for (const {
+      segmentId,
+      streamSwarmId: streamCacheId,
+    } of this.cache.values()) {
+      if (streamCacheId !== streamSwarmId) continue;
       externalIds.push(segmentId);
     }
 
@@ -194,8 +201,8 @@ export class SegmentMemoryStorage implements SegmentStorage {
     );
 
     for (const segmentData of sortedCache) {
-      const { streamId, segmentId, data } = segmentData;
-      const storageId = getStorageItemId(streamId, segmentId);
+      const { streamSwarmId, segmentId, data } = segmentData;
+      const storageId = getStorageItemId(streamSwarmId, segmentId);
 
       const shouldRemove = this.shouldRemoveSegment(
         segmentData,
@@ -206,10 +213,10 @@ export class SegmentMemoryStorage implements SegmentStorage {
       if (!shouldRemove) continue;
 
       this.cache.delete(storageId);
-      affectedStreams.add(streamId);
+      affectedStreams.add(streamSwarmId);
       this.decreaseStorageUsage(data.byteLength);
 
-      this.logger(`Removed segment ${segmentId} from stream ${streamId}`);
+      this.logger(`Removed segment ${segmentId} from stream ${streamSwarmId}`);
 
       if (!this.isMemoryLimitReached(newSegmentSize) && !isLiveStream) break;
     }
@@ -224,7 +231,9 @@ export class SegmentMemoryStorage implements SegmentStorage {
     );
   }
 
-  setSegmentChangeCallback(callback: ((streamId: string) => void) | undefined) {
+  setSegmentChangeCallback(
+    callback: ((streamSwarmId: string) => void) | undefined,
+  ) {
     this.segmentChangeCallback = callback;
   }
 

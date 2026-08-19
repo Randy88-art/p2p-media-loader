@@ -17,7 +17,7 @@ type Playback = {
 };
 
 type LastRequestedSegmentInfo = {
-  streamId: string;
+  streamSwarmId: string;
   segmentId: number;
   startTime: number;
   endTime: number;
@@ -29,7 +29,7 @@ type LastRequestedSegmentInfo = {
 type SegmentInfoItem = {
   storageId: string;
   dataLength: number;
-  streamId: string;
+  streamSwarmId: string;
   segmentId: number;
   streamType: string;
   startTime: number;
@@ -37,14 +37,17 @@ type SegmentInfoItem = {
   swarmId: string;
 };
 
-function getStorageItemId(streamId: string, segmentId: number) {
-  return `${streamId}|${segmentId}`;
+function getStorageItemId(streamSwarmId: string, segmentId: number) {
+  return `${streamSwarmId}|${segmentId}`;
 }
 
 const INFO_ITEMS_STORE_NAME = "segmentInfo";
 const DATA_ITEMS_STORE_NAME = "segmentData";
 const DB_NAME = "p2p-media-loader";
-const DB_VERSION = 1;
+// Version 2: the persisted segment info field streamId was renamed to
+// streamSwarmId. Bump on every change to the persisted record shape — the
+// upgrade handler drops and recreates the stores (cached data is disposable).
+const DB_VERSION = 2;
 const BYTES_PER_MB = 1048576;
 
 export class IndexedDbStorage implements SegmentStorage {
@@ -60,7 +63,7 @@ export class IndexedDbStorage implements SegmentStorage {
   private lastRequestedSegment?: LastRequestedSegmentInfo; // details  about the last requested segment by the player
   private db: IndexedDbWrapper;
 
-  private segmentChangeCallback?: (streamId: string) => void;
+  private segmentChangeCallback?: (streamSwarmId: string) => void;
 
   constructor() {
     this.db = new IndexedDbWrapper(
@@ -77,7 +80,7 @@ export class IndexedDbStorage implements SegmentStorage {
 
   onSegmentRequested(
     swarmId: string,
-    streamId: string,
+    streamSwarmId: string,
     segmentId: number,
     startTime: number,
     endTime: number,
@@ -85,7 +88,7 @@ export class IndexedDbStorage implements SegmentStorage {
     isLiveStream: boolean,
   ) {
     this.lastRequestedSegment = {
-      streamId,
+      streamSwarmId,
       segmentId,
       startTime,
       endTime,
@@ -117,7 +120,7 @@ export class IndexedDbStorage implements SegmentStorage {
 
   async storeSegment(
     swarmId: string,
-    streamId: string,
+    streamSwarmId: string,
     segmentId: number,
     data: ArrayBuffer,
     startTime: number,
@@ -125,7 +128,7 @@ export class IndexedDbStorage implements SegmentStorage {
     streamType: StreamType,
     _isLiveStream: boolean,
   ) {
-    const storageId = getStorageItemId(streamId, segmentId);
+    const storageId = getStorageItemId(streamSwarmId, segmentId);
     const segmentDataItem = {
       storageId,
       data,
@@ -133,7 +136,7 @@ export class IndexedDbStorage implements SegmentStorage {
     const segmentInfoItem = {
       storageId,
       dataLength: data.byteLength,
-      streamId,
+      streamSwarmId,
       segmentId,
       streamType,
       startTime,
@@ -156,7 +159,7 @@ export class IndexedDbStorage implements SegmentStorage {
       this.increaseMemoryStorageSize(data.byteLength);
 
       if (this.segmentChangeCallback) {
-        this.segmentChangeCallback(streamId);
+        this.segmentChangeCallback(streamSwarmId);
       }
     } catch (error) {
       // eslint-disable-next-line no-console
@@ -165,8 +168,12 @@ export class IndexedDbStorage implements SegmentStorage {
     }
   }
 
-  async getSegmentData(_swarmId: string, streamId: string, segmentId: number) {
-    const segmentStorageId = getStorageItemId(streamId, segmentId);
+  async getSegmentData(
+    _swarmId: string,
+    streamSwarmId: string,
+    segmentId: number,
+  ) {
+    const segmentStorageId = getStorageItemId(streamSwarmId, segmentId);
     try {
       const result = await this.db.get<SegmentDataItem>(
         DATA_ITEMS_STORE_NAME,
@@ -194,16 +201,16 @@ export class IndexedDbStorage implements SegmentStorage {
     };
   }
 
-  hasSegment(_swarmId: string, streamId: string, segmentId: number) {
-    const storageId = getStorageItemId(streamId, segmentId);
+  hasSegment(_swarmId: string, streamSwarmId: string, segmentId: number) {
+    const storageId = getStorageItemId(streamSwarmId, segmentId);
     return this.cache.has(storageId);
   }
 
-  getStoredSegmentIds(_swarmId: string, streamId: string) {
+  getStoredSegmentIds(_swarmId: string, streamSwarmId: string) {
     const storedSegments: number[] = [];
 
     for (const segment of this.cache.values()) {
-      if (segment.streamId === streamId) {
+      if (segment.streamSwarmId === streamSwarmId) {
         storedSegments.push(segment.segmentId);
       }
     }
@@ -216,7 +223,7 @@ export class IndexedDbStorage implements SegmentStorage {
     this.cache.clear();
   }
 
-  setSegmentChangeCallback(callback: (streamId: string) => void) {
+  setSegmentChangeCallback(callback: (streamSwarmId: string) => void) {
     this.segmentChangeCallback = callback;
   }
 
@@ -224,7 +231,7 @@ export class IndexedDbStorage implements SegmentStorage {
     const result = await this.db.getAll<SegmentInfoItem>(INFO_ITEMS_STORE_NAME);
 
     result.forEach((item) => {
-      const storageId = getStorageItemId(item.streamId, item.segmentId);
+      const storageId = getStorageItemId(item.streamSwarmId, item.segmentId);
       this.cache.set(storageId, item);
 
       this.increaseMemoryStorageSize(item.dataLength);

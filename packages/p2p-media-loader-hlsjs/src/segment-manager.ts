@@ -3,9 +3,12 @@ import type {
   ManifestLoadedData,
   LevelUpdatedData,
   AudioTrackLoadedData,
-  LevelParsed,
 } from "hls.js";
-import { Core, Segment, generateStreamShortId } from "p2p-media-loader-core";
+import { Core, Segment, StreamRegistration } from "p2p-media-loader-core";
+import {
+  getAudioStreamProperties,
+  getVideoStreamProperties,
+} from "./stream-properties.js";
 
 export class SegmentManager {
   core: Core;
@@ -19,46 +22,29 @@ export class SegmentManager {
     // in the case of audio only stream it is stored in levels
 
     for (const level of levels) {
-      const { url, bitrate, maxBitrate, videoCodec, width, height } =
-        level as LevelParsed & { maxBitrate?: number };
-      // maxBitrate tracks the peak BANDWIDTH tag, whereas bitrate tracks AVERAGE-BANDWIDTH.
-      // We prioritize maxBitrate to universally match Shaka's variant.bandwidth parsing.
-      const b = maxBitrate ?? bitrate;
-      const isMissingMetadata = b === 0;
-      const frameRate = level.attrs["FRAME-RATE"];
-      const videoRange = level.attrs["VIDEO-RANGE"];
-
-      const index = generateStreamShortId({
-        bitrate: b,
-        codecs: isMissingMetadata ? undefined : videoCodec,
-        width: isMissingMetadata ? undefined : width,
-        height: isMissingMetadata ? undefined : height,
-        frameRate: isMissingMetadata ? undefined : frameRate,
-        videoRange: isMissingMetadata ? undefined : videoRange,
-      });
-      this.core.addStreamIfNoneExists({
+      const { url } = level;
+      this.addStream({
         runtimeId: Array.isArray(url) ? (url as string[])[0] : url,
         type: "main",
-        index,
+        properties: getVideoStreamProperties(level),
       });
     }
 
     for (const track of audioTracks) {
-      // Object properties vary across hls.js versions so we cast to any:
-      const { url, audioCodec, lang, channels, name } = track;
-      const index = generateStreamShortId({
-        bitrate: 0, // Match Shaka behavior for audio stream without variant
-        codecs: audioCodec,
-        language: lang,
-        channels,
-        name,
-      });
-      this.core.addStreamIfNoneExists({
+      const { url } = track;
+      this.addStream({
         runtimeId: Array.isArray(url) ? (url as string[])[0] : url,
         type: "secondary",
-        index,
+        properties: getAudioStreamProperties(track),
       });
     }
+  }
+
+  private addStream(stream: StreamRegistration) {
+    // Registration never throws: the core reports failures via its
+    // onStreamRegistrationError event, and a failed stream's segments load
+    // through the default hls.js loader without P2P.
+    this.core.addStreamIfNoneExists(stream);
   }
 
   updatePlaylist(data: LevelUpdatedData | AudioTrackLoadedData) {
@@ -66,10 +52,10 @@ export class SegmentManager {
       details: { url, fragments, live },
     } = data;
 
-    const playlist = this.core.getStream(url);
-    if (!playlist) return;
+    const registeredSegmentIds = this.core.getStreamSegmentRuntimeIds(url);
+    if (!registeredSegmentIds) return;
 
-    const segmentToRemoveIds = new Set(playlist.segments.keys());
+    const segmentToRemoveIds = new Set(registeredSegmentIds);
     const newSegments: Segment[] = [];
     fragments.forEach((fragment, index) => {
       const {
@@ -88,7 +74,7 @@ export class SegmentManager {
       const runtimeId = Utils.getSegmentRuntimeId(responseUrl, byteRange);
       segmentToRemoveIds.delete(runtimeId);
 
-      if (playlist.segments.has(runtimeId)) return;
+      if (registeredSegmentIds.has(runtimeId)) return;
       newSegments.push({
         runtimeId,
         url: responseUrl,

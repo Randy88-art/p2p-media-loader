@@ -1,6 +1,5 @@
-import { Playback } from "../internal-types.js";
+import { Playback, SegmentWithStream } from "../internal-types.js";
 import { P2PLoader } from "../p2p/loader.js";
-import { SegmentWithStream } from "../types.js";
 import {
   getSegmentPlaybackStatuses,
   SegmentPlaybackStatuses,

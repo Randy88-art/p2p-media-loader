@@ -1,11 +1,14 @@
 import debug from "debug";
-import { BandwidthCalculators, Playback } from "../internal-types.js";
+import {
+  BandwidthCalculators,
+  Playback,
+  SegmentWithStream,
+} from "../internal-types.js";
 import {
   CoreEventMap,
   RequestError,
   RequestAbortErrorType,
   RequestErrorType,
-  SegmentWithStream,
   Segment,
 } from "../types.js";
 import * as StreamUtils from "../utils/stream.js";
@@ -44,22 +47,17 @@ type OmitEncapsulated<T extends RequestAttempt> = Omit<
   "error" | "errorTimestamp"
 >;
 type StartRequestParameters =
-  | OmitEncapsulated<HttpRequestAttempt>
-  | OmitEncapsulated<P2PRequestAttempt>;
+  OmitEncapsulated<HttpRequestAttempt> | OmitEncapsulated<P2PRequestAttempt>;
 
 export type RequestStatus =
-  | "not-started"
-  | "loading"
-  | "succeed"
-  | "failed"
-  | "aborted";
+  "not-started" | "loading" | "succeed" | "failed" | "aborted";
 
 function mapSegmentWithStreamToSegment(segment: SegmentWithStream): Segment {
   return {
     runtimeId: segment.runtimeId,
     externalId: segment.externalId,
     url: segment.url,
-    byteRange: segment.byteRange,
+    byteRange: segment.byteRange && { ...segment.byteRange },
     startTime: segment.startTime,
     endTime: segment.endTime,
   };
@@ -425,7 +423,6 @@ export class Request {
     this.setStatus("succeed");
     this._totalBytes = this._loadedBytes;
     this.onSegmentLoaded({
-      segmentUrl: this.segment.url,
       segment: mapSegmentWithStreamToSegment(this.segment),
       bytesLength: this.data.byteLength,
       downloadSource: this.currentAttempt.downloadSource,

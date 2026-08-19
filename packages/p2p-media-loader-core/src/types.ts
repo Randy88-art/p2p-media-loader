@@ -6,9 +6,9 @@ export type StreamType = "main" | "secondary";
 /** Represents a range of bytes, used for specifying a segment of data to download. */
 export type ByteRange = {
   /** The starting byte index of the range. */
-  start: number;
+  readonly start: number;
   /** The ending byte index of the range. */
-  end: number;
+  readonly end: number;
 };
 
 /** Describes a media segment with its unique identifiers, location, and timing information. */
@@ -32,17 +32,21 @@ export type Segment = {
   readonly endTime: number;
 };
 
-/** Extends a Segment with a reference to its associated stream. */
-export type SegmentWithStream<TStream extends Stream = Stream> = Segment & {
-  readonly stream: StreamWithSegments<TStream>;
-};
-
 /**
- * Represents a stream that includes multiple segments, each associated with the stream.
- * @template TStream Type of the underlying stream data structure.
+ * Raw stream properties extracted from the manifest's variant or rendition
+ * metadata. They define the stream's identity: streams with equal normalized
+ * properties are treated as the same stream by all peers.
  */
-export type StreamWithSegments<TStream extends Stream = Stream> = TStream & {
-  readonly segments: Map<string, SegmentWithStream<TStream>>;
+export type StreamProperties = {
+  bitrate?: number | null;
+  codecs?: string | null;
+  width?: number | null;
+  height?: number | null;
+  language?: string | null;
+  channels?: string | number | null;
+  name?: string | null;
+  frameRate?: number | string | null;
+  videoRange?: string | null;
 };
 
 /** Represents a media stream with various defining characteristics. */
@@ -53,9 +57,45 @@ export type Stream = {
   /** Stream type. */
   readonly type: StreamType;
 
-  /** Stream unique identifier. The same for all peers. */
-  readonly index: string;
+  /** Raw stream properties from the manifest, provided by the player integration. */
+  readonly properties: Readonly<StreamProperties>;
+
+  /**
+   * The swarm ID the stream was registered with: the configured `swarmId`
+   * or, if not set, the manifest response URL. Resolved once at registration.
+   */
+  readonly swarmId: string;
+
+  /**
+   * Stream identity hash derived from the normalized stream properties.
+   * The same for all peers regardless of the player in use.
+   */
+  readonly identityHash: string;
+
+  /**
+   * The pre-hash string that defines which P2P swarm the stream belongs to.
+   * By default `${peerProtocolVersion}-${swarmId}-${type}-${identityHash}`;
+   * a custom `streamSwarmIdBuilder` may override it. Computed once at registration.
+   */
+  readonly streamSwarmId: string;
+
+  /**
+   * The infohash announced to trackers for the stream's swarm:
+   * a 20-character ASCII string derived from the stream swarm ID.
+   * Computed once at registration.
+   */
+  readonly infoHash: string;
 };
+
+/**
+ * The stream data a player integration passes to `Core.addStreamIfNoneExists`.
+ * The identity fields (`swarmId`, `identityHash`, `streamSwarmId`, `infoHash`)
+ * are computed by the Core at registration.
+ */
+export type StreamRegistration<TStream extends Stream = Stream> = Omit<
+  TStream,
+  "swarmId" | "identityHash" | "streamSwarmId" | "infoHash"
+>;
 
 /** Represents a defined Core configuration with specific settings for the main and secondary streams. */
 export type DefinedCoreConfig = CommonCoreConfig & {
@@ -97,6 +137,9 @@ export type DynamicStreamProperties =
 /**
  * Represents a dynamically modifiable configuration, allowing updates to selected CoreConfig properties at runtime.
  *
+ * Note that `swarmId` and `streamSwarmIdBuilder` cannot be changed at runtime:
+ * stream identity is derived from them once, when a stream is registered.
+ *
  * @example
  * ```typescript
  * const dynamicConfig: DynamicCoreConfig = {
@@ -104,11 +147,11 @@ export type DynamicStreamProperties =
  *     cachedSegmentsCount: 200,
  *   },
  *   mainStream: {
- *     swarmId: "custom swarm ID for video stream",
+ *     highDemandTimeWindow: 20,
  *     p2pDownloadTimeWindow: 6000,
  *   },
  *   secondaryStream: {
- *     swarmId: "custom swarm ID for audio stream",
+ *     highDemandTimeWindow: 10,
  *     p2pDownloadTimeWindow: 3000,
  *   }
  * };
@@ -201,7 +244,8 @@ export type CommonCoreConfig = {
  *   // Optional configuration for the secondary stream
  *   swarmId: "custom swarm ID for audio stream",
  *  },
- *  ```
+ * }
+ * ```
  */
 export type CoreConfig = Partial<StreamConfig> &
   Partial<CommonCoreConfig> & {
@@ -377,6 +421,7 @@ export type StreamConfig = {
    * ```typescript
    * [
    *   "wss://tracker.novage.com.ua",
+   *   "wss://tracker.webtorrent.dev",
    *   "wss://tracker.openwebtorrent.com",
    * ]
    * ```
@@ -406,12 +451,63 @@ export type StreamConfig = {
   /**
    * An optional unique identifier for the swarm, used to isolate peer pools by media stream.
    * If left undefined, the manifest URL will be used as the swarm ID.
+   *
+   * This property cannot be changed at runtime: stream identity is derived
+   * from it once, when a stream is registered.
+   *
    * @default
    * ```typescript
    * swarmId: undefined
    * ```
    */
   swarmId?: string;
+
+  /**
+   * An optional function that builds a custom stream swarm ID.
+   * The stream swarm ID is hashed into the infohash announced to trackers
+   * (`infoHash = computeInfoHash(streamSwarmId)`), so it fully defines which
+   * swarm the stream's peers join.
+   *
+   * Use it to make infohashes predictable on a server: build the ID from
+   * values the server knows (e.g. swarm ID, stream type, resolution), then
+   * compute the same infohash server-side with `computeInfoHash` from
+   * `p2p-media-loader-core/server` — for example, to allowlist the hashes
+   * on a private tracker.
+   *
+   * The function must be deterministic and identical across all peers of the
+   * swarm, and every distinct stream must map to a distinct ID: peers whose
+   * streams resolve to the same infohash exchange segments with each other, and
+   * registering two different streams with the same ID fails the registration
+   * (reported via the `onStreamRegistrationError` event). Include enough
+   * properties to guarantee uniqueness — resolution alone collides on ladders
+   * with several bitrates at the same resolution. If in doubt, incorporate the
+   * `identityHash` from the context (reproduce it server-side with
+   * `computeStreamIdentityHash`).
+   *
+   * Called once per stream at registration. This property cannot be changed
+   * at runtime.
+   *
+   * @param context - The stream identity data the ID may be built from,
+   * including the ready-made `defaultStreamSwarmId`.
+   * @returns The stream swarm ID, or `undefined` to use the default
+   * derivation (`` `${peerProtocolVersion}-${swarmId}-${streamType}-${identityHash}` ``,
+   * provided as `context.defaultStreamSwarmId`).
+   *
+   * @default
+   * ```typescript
+   * streamSwarmIdBuilder: undefined
+   * ```
+   *
+   * @example
+   * ```typescript
+   * // Include bitrate: resolution alone collides on multi-bitrate ladders.
+   * streamSwarmIdBuilder: ({ swarmId, streamType, properties }) =>
+   *   `my-app-${swarmId}-${streamType}-${properties.height ?? 0}-${properties.bitrate ?? 0}`,
+   * ```
+   */
+  streamSwarmIdBuilder?: (
+    context: StreamSwarmIdBuilderContext,
+  ) => string | undefined;
 
   /**
    * An optional function to validate a P2P segment before fully integrating it into the playback buffer.
@@ -558,6 +654,34 @@ export type StreamConfig = {
   webRtcConnectionTimeoutMs: number;
 };
 
+/** The stream identity data passed to a custom `streamSwarmIdBuilder`. */
+export type StreamSwarmIdBuilderContext = {
+  /** The swarm ID of the stream: the configured `swarmId` or the manifest response URL. */
+  swarmId: string;
+
+  /** Runtime identifier of the stream from the engine. May differ from peer to peer — avoid using it in the ID. */
+  runtimeId: string;
+
+  /** Stream type. */
+  streamType: StreamType;
+
+  /** Raw stream properties from the manifest. */
+  properties: Readonly<StreamProperties>;
+
+  /** Stream identity hash derived from the normalized stream properties. The same for all peers. */
+  identityHash: string;
+
+  /**
+   * The stream swarm ID the default derivation would produce:
+   * `${peerProtocolVersion}-${swarmId}-${streamType}-${identityHash}`.
+   * Useful as a base for custom IDs, e.g. `` `${tenant}-${defaultStreamSwarmId}` ``.
+   */
+  defaultStreamSwarmId: string;
+
+  /** Version of the peer swarm protocol used in the default stream swarm ID derivation. */
+  peerProtocolVersion: string;
+};
+
 /**
  * Specifies the source of a download within a media streaming context.
  *
@@ -567,12 +691,12 @@ export type StreamConfig = {
  */
 export type DownloadSource = "http" | "p2p";
 
-/** Represents details about a segment event. */
-export type SegmentStartDetails = {
+/** Fields common to all segment event payloads. */
+export type SegmentEventDetails = {
   /** The segment that the event is about. */
   segment: Segment;
 
-  /** The origin of the segment download. */
+  /** The source of the download. */
   downloadSource: DownloadSource;
 
   /** The peer ID, if the segment is downloaded from a peer. */
@@ -585,70 +709,28 @@ export type SegmentStartDetails = {
   streamType: StreamType;
 };
 
+/** Represents details about a segment event. */
+export type SegmentStartDetails = SegmentEventDetails;
+
 /** Represents details about a segment error event. */
-export type SegmentErrorDetails = {
+export type SegmentErrorDetails = SegmentEventDetails & {
   /** The error that occurred during the segment download. */
   error: RequestError;
-
-  /** The segment that the event is about. */
-  segment: Segment;
-
-  /** The source of the download. */
-  downloadSource: DownloadSource;
-
-  /** The peer ID, if the segment was downloaded from a peer. */
-  peerId: string | undefined;
-
-  /** The info hash of the swarm that the segment belongs to. */
-  infoHash: string;
-
-  /** The type of stream that the segment is associated with. */
-  streamType: StreamType;
 };
 
 /** Represents details about a segment abort event. */
-export type SegmentAbortDetails = {
-  /** The segment that the event is about. */
-  segment: Segment;
-
-  /** The source of the download. */
+export type SegmentAbortDetails = Omit<
+  SegmentEventDetails,
+  "downloadSource"
+> & {
+  /** The source of the download, if it was determined before the abort. */
   downloadSource: DownloadSource | undefined;
-
-  /** The peer ID, if the segment was downloaded from a peer. */
-  peerId: string | undefined;
-
-  /** The info hash of the swarm that the segment belongs to. */
-  infoHash: string;
-
-  /** The type of stream that the segment is associated with. */
-  streamType: StreamType;
 };
 
 /** Represents the details about a loaded segment. */
-export type SegmentLoadDetails = {
-  /**
-   * The URL of the loaded segment
-   * @deprecated Use `segment.url` instead
-   */
-  segmentUrl: string;
-
-  /** The segment that the event is about. */
-  segment: Segment;
-
+export type SegmentLoadDetails = SegmentEventDetails & {
   /** The length of the segment in bytes. */
   bytesLength: number;
-
-  /** The source of the download. */
-  downloadSource: DownloadSource;
-
-  /** The peer ID, if the segment was downloaded from a peer. */
-  peerId: string | undefined;
-
-  /** The info hash of the swarm that the segment belongs to. */
-  infoHash: string;
-
-  /** The type of stream that the segment is associated with. */
-  streamType: StreamType;
 };
 
 /** Represents the details of a peer in a peer-to-peer network. */
@@ -659,6 +741,8 @@ export type PeerDetails = {
   infoHash: string;
   /** The type of stream that the peer is connected to. */
   streamType: StreamType;
+  /** The tracker URL that the peer was discovered from. */
+  trackerUrl: string;
 };
 
 /** Represents the types of errors that can occur during a peer connection. */
@@ -671,8 +755,9 @@ export type PeerErrorType =
   | "connection-lost";
 
 /**
- * Base class for domain-specific errors carrying a machine-readable type discriminator.
- * @internal
+ * Base class for all errors and warnings emitted by the library, carrying a
+ * machine-readable `type` discriminator. Use `instanceof TypedError` to catch
+ * any library error regardless of its specific class.
  */
 export abstract class TypedError<T extends string> extends Error {
   readonly cause?: unknown;
@@ -694,13 +779,7 @@ export class PeerError extends TypedError<PeerErrorType> {
 }
 
 /** Represents the details of a peer error event. */
-export type PeerErrorDetails = {
-  /** The unique identifier for a peer in the network. */
-  peerId: string;
-  /** The info hash of the swarm that the peer is part of. */
-  infoHash: string;
-  /** The type of stream that the peer is connected to. */
-  streamType: StreamType;
+export type PeerErrorDetails = PeerDetails & {
   /** The error that occurred during the peer-to-peer connection. */
   error: PeerError;
 };
@@ -714,46 +793,36 @@ export class PeerWarning extends TypedError<PeerWarningType> {
 }
 
 /** Represents the details of a peer warning event. */
-export type PeerWarningDetails = {
-  /** The unique identifier for a peer in the network. */
-  peerId: string;
-  /** The info hash of the swarm that the peer is part of. */
-  infoHash: string;
-  /** The type of stream that the peer is connected to. */
-  streamType: StreamType;
+export type PeerWarningDetails = PeerDetails & {
   /** The warning that occurred during the peer-to-peer connection. */
   warning: PeerWarning;
 };
 
-/** Represents the details of a tracker error event. */
-export type TrackerErrorDetails = {
+/** Fields common to all tracker event payloads. */
+export type TrackerEventDetails = {
   /** The tracker URL. */
   trackerUrl: string;
   /** The info hash of the swarm that the tracker is for. */
   infoHash: string;
   /** The type of stream that the tracker is for. */
   streamType: StreamType;
+};
+
+/** Represents the details of a tracker error event. */
+export type TrackerErrorDetails = TrackerEventDetails & {
   /** The error that occurred during the tracker request. */
   error: TrackerError;
 };
 
-export type TrackerWarningDetails = {
-  /** The tracker URL. */
-  trackerUrl: string;
-  /** The info hash of the swarm that the tracker is for. */
-  infoHash: string;
-  /** The type of stream that the tracker is for. */
-  streamType: StreamType;
+/** Represents the details of a tracker warning event. */
+export type TrackerWarningDetails = TrackerEventDetails & {
   /** The warning that occurred during the tracker request. */
   warning: TrackerWarning;
 };
 
 /** Represents the types of errors that can occur during the tracker request process. */
 export type TrackerErrorType =
-  | "announce-failed"
-  | "parse-error"
-  | "tracker-response"
-  | "signaling-failed";
+  "announce-failed" | "parse-error" | "tracker-response" | "signaling-failed";
 
 /** Represents an error that occurred during a tracker request. */
 export class TrackerError extends TypedError<TrackerErrorType> {
@@ -777,17 +846,36 @@ export class PeerConnectError extends TypedError<PeerConnectErrorType> {
 }
 
 /** Represents the details of a peer connection error event. */
-export type PeerConnectErrorDetails = {
-  /** The unique identifier for a peer in the network. */
-  peerId: string;
-  /** The info hash of the swarm that the peer is connected to. */
-  infoHash: string;
-  /** The type of stream that the peer is connected to. */
-  streamType: StreamType;
-  /** The tracker URL that the peer was discovered from. */
-  trackerUrl: string;
+export type PeerConnectErrorDetails = PeerDetails & {
   /** The error that occurred during the peer-to-peer connection. */
   error: PeerConnectError;
+};
+
+/** Represents the details of a stream registration failure. */
+export type StreamRegistrationErrorDetails = {
+  /** Runtime identifier of the stream that failed to register. */
+  runtimeId: string;
+
+  /** Stream type. */
+  streamType: StreamType;
+
+  /** Raw stream properties the integration passed for the stream. */
+  properties: Readonly<StreamProperties>;
+
+  /** The error that caused the registration to fail. */
+  error: Error;
+};
+
+/** Represents the details about a registered stream. */
+export type StreamAddedDetails<TStream extends Stream = Stream> = {
+  /**
+   * The registered stream with its computed identity.
+   *
+   * A snapshot taken at registration, detached from the core's internal
+   * stream state. The identity fields never change after registration, so
+   * the snapshot stays accurate for the stream's lifetime.
+   */
+  stream: TStream;
 };
 
 /**
@@ -795,6 +883,33 @@ export type PeerConnectErrorDetails = {
  * of segment downloading and uploading processes.
  */
 export type CoreEventMap = {
+  /**
+   * Invoked when a stream is registered in the Core, once per stream.
+   * The stream carries its computed identity, including the infohash
+   * announced to trackers for its swarm.
+   *
+   * The event map is not generic, so the stream is typed as the base
+   * `Stream`. Consumers of a `Core<TStream>` receive their extended stream
+   * at runtime and may narrow via `StreamAddedDetails<TStream>`.
+   *
+   * @param params - Contains the registered stream.
+   */
+  onStreamAdded: (params: StreamAddedDetails) => void;
+
+  /**
+   * Invoked when a stream fails to register in the Core: the swarm ID is
+   * unresolvable, or a custom `streamSwarmIdBuilder` returned an invalid or
+   * colliding stream swarm ID. The stream stays unknown to the core — its
+   * segments load through the player's default path without P2P; other
+   * streams are unaffected.
+   *
+   * Subscribe to surface `streamSwarmIdBuilder` misconfigurations: without a
+   * listener the failure is only visible in debug logs.
+   *
+   * @param params - Contains the failed registration and the error.
+   */
+  onStreamRegistrationError: (params: StreamRegistrationErrorDetails) => void;
+
   /**
    * Invoked when a segment is fully downloaded and available for use.
    *
@@ -921,15 +1036,11 @@ export type HttpRequestErrorType =
 
 /** Defines the types of errors specific to peer-to-peer requests. */
 export type PeerRequestErrorType =
-  | "peer-segment-absent"
-  | "peer-closed"
-  | "p2p-segment-validation-failed";
+  "peer-segment-absent" | "peer-closed" | "p2p-segment-validation-failed";
 
 /** Enumerates all possible request error types, including HTTP and peer-related errors. */
 export type RequestErrorType =
-  | RequestAbortErrorType
-  | PeerRequestErrorType
-  | HttpRequestErrorType;
+  RequestAbortErrorType | PeerRequestErrorType | HttpRequestErrorType;
 
 /**
  * Represents an error that can occur during the request process, with a timestamp for when the error occurred.
@@ -957,7 +1068,13 @@ export class RequestError<
 
 /** Represents the response from a segment request, including the data and measured bandwidth. */
 export type SegmentResponse = {
-  /** Segment data as an ArrayBuffer. */
+  /**
+   * Segment data as an ArrayBuffer.
+   *
+   * May reference the same buffer the core keeps in segment storage for P2P
+   * upload. Treat it as read-only and never transfer it to a worker — copy it
+   * first (e.g. `data.slice(0)`), otherwise peers receive corrupted segments.
+   */
   data: ArrayBuffer;
 
   /** Measured bandwidth for the segment download, in bytes per second. */

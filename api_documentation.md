@@ -62,8 +62,8 @@ For additional examples using npm packages, please refer to our [React demo](htt
     <script type="importmap">
       {
         "imports": {
-          "p2p-media-loader-core": "https://cdn.jsdelivr.net/npm/p2p-media-loader-core@^2/dist/p2p-media-loader-core.es.min.js",
-          "p2p-media-loader-hlsjs": "https://cdn.jsdelivr.net/npm/p2p-media-loader-hlsjs@^2/dist/p2p-media-loader-hlsjs.es.min.js"
+          "p2p-media-loader-core": "https://cdn.jsdelivr.net/npm/p2p-media-loader-core@^4/dist/p2p-media-loader-core.es.min.js",
+          "p2p-media-loader-hlsjs": "https://cdn.jsdelivr.net/npm/p2p-media-loader-hlsjs@^4/dist/p2p-media-loader-hlsjs.es.min.js"
         }
       }
     </script>
@@ -389,8 +389,8 @@ For additional examples using npm packages, please refer to our [React demo](htt
     <script type="importmap">
       {
         "imports": {
-          "p2p-media-loader-core": "https://cdn.jsdelivr.net/npm/p2p-media-loader-core@^2/dist/p2p-media-loader-core.es.min.js",
-          "p2p-media-loader-shaka": "https://cdn.jsdelivr.net/npm/p2p-media-loader-shaka@^2/dist/p2p-media-loader-shaka.es.min.js"
+          "p2p-media-loader-core": "https://cdn.jsdelivr.net/npm/p2p-media-loader-core@^4/dist/p2p-media-loader-core.es.min.js",
+          "p2p-media-loader-shaka": "https://cdn.jsdelivr.net/npm/p2p-media-loader-shaka@^4/dist/p2p-media-loader-shaka.es.min.js"
         }
       }
     </script>
@@ -628,3 +628,48 @@ The global namespaces are `window.p2pml.hlsjs` and `window.p2pml.shaka`.
   });
 </script>
 ```
+
+## Predicting swarm infohashes on a server
+
+Each stream (media quality) is downloaded through its own P2P swarm, identified on trackers by an **infohash**. The infohash is the hash of the **stream swarm ID** — a string derived from the swarm ID, the stream type, and the stream's identity hash (a stable hash of its manifest properties such as bitrate, codecs, and resolution).
+
+A server can compute the exact infohashes clients will announce — for example, to allowlist them on a private tracker. The Node-safe helpers are exported from the `p2p-media-loader-core/server` subpath (Node.js 16+). The package is published as ESM only — from a CommonJS project, load it with a dynamic `import()` (or `require()` on Node.js 20.17+):
+
+```typescript
+import {
+  computeStreamSwarmId,
+  computeInfoHash,
+} from "p2p-media-loader-core/server";
+
+// With the default client configuration:
+const infoHash = computeInfoHash(
+  computeStreamSwarmId({
+    swarmId, // the configured swarmId or the manifest URL without query parameters
+    streamType: "main",
+    properties: { bitrate, codecs, width, height },
+  }),
+);
+
+// The tracker allowlist entry (hex of the announced 20-byte ASCII string):
+const allowlistEntry = Buffer.from(infoHash, "utf8").toString("hex");
+```
+
+For full control, configure a custom `streamSwarmIdBuilder` on the client and apply `computeInfoHash` to the same string on the server. This way the infohash depends only on values the server authors itself:
+
+```typescript
+// Client
+const config = {
+  swarmId: videoUuid,
+  streamSwarmIdBuilder: ({ swarmId, streamType, properties }) =>
+    `my-app-${swarmId}-${streamType}-${properties.height ?? 0}-${properties.bitrate ?? 0}`,
+};
+
+// Server (per quality, at transcode time)
+const infoHash = computeInfoHash(
+  `my-app-${videoUuid}-main-${height}-${bitrate}`,
+);
+```
+
+The stream swarm ID must be deterministic and identical across all peers of a swarm, and **every distinct stream must map to a distinct ID**. Include enough properties to guarantee that: resolution alone collides on ladders with several bitrates at the same resolution, so the example above adds `bitrate`. If your ladder can have several renditions sharing those fields (e.g. different codecs at the same resolution and bitrate), add the distinguishing property too, or incorporate the stream's `identityHash` (reproduce it server-side with `computeStreamIdentityHash(properties)`). Registering two different streams with the same ID throws. The builder cannot be changed at runtime. Clients can also observe each registered stream's computed identity through the `onStreamAdded` core event.
+
+The builder context also provides `defaultStreamSwarmId` — the ID the default derivation would produce — which is guaranteed unique per stream and convenient as a base for custom IDs (e.g. `` `${tenant}-${defaultStreamSwarmId}` ``; reproduce it server-side with `computeStreamSwarmId` or compose it with `buildStreamSwarmId(swarmId, streamType, identityHash)`).

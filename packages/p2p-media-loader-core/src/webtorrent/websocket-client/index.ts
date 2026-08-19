@@ -9,11 +9,7 @@ export type WebSocketClientEventMap = {
 };
 
 export type WebSocketClientState =
-  | "connecting"
-  | "connected"
-  | "reconnecting"
-  | "disconnected"
-  | "disposed";
+  "connecting" | "connected" | "reconnecting" | "disconnected" | "disposed";
 
 export interface WebSocketClientConfig {
   url: string;

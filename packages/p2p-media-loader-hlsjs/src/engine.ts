@@ -290,13 +290,15 @@ export class HlsJsP2PEngine {
   };
 
   private handleManifestLoaded = (event: string, data: ManifestLoadedData) => {
-    // eslint-disable-next-line prefer-destructuring
-    const networkDetails: unknown = data.networkDetails;
-    if (networkDetails instanceof XMLHttpRequest) {
-      this.core.setManifestResponseUrl(networkDetails.responseURL);
-    } else if (networkDetails instanceof Response) {
-      this.core.setManifestResponseUrl(networkDetails.url);
-    }
+    // hls.js already resolves this URL for us (getResponseUrl): it is the
+    // loader-reported response URL — post-redirect for any loader that honors
+    // the `response.url` contract, including both default loaders — with a
+    // guarded fallback to the request URL (custom loaders that omit
+    // `response.url`, or legacy WebViews without `xhr.responseURL`). A custom
+    // loader that omits `response.url` on a redirecting manifest degrades to
+    // the pre-redirect URL: its peers still form a consistent swarm among
+    // themselves, but not with default-loader peers.
+    this.core.setManifestResponseUrl(data.url);
     this.segmentManager.processMainManifest(data);
   };
 
